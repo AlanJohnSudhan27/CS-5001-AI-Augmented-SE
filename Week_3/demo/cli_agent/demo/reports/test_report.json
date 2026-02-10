@@ -1,0 +1,17 @@
+{
+  "agent_config": {
+    "host": "http://localhost:11434",
+    "max_iters": 3,
+    "model": "devstral-small-2:24b-cloud",
+    "repo": "demo",
+    "temperature": 0.0,
+    "verbose": true
+  },
+  "command": "coverage run -m pytest -q && coverage json -o .coverage.json",
+  "module_coverage": {},
+  "module_path": null,
+  "pytest_output": "..F.FF...F.                                                              [100%]\n=================================== FAILURES ===================================\n___________________________ test_solve_invalid_board ___________________________\n\nsolver = <src.app.SudokuSolver object at 0x7f998979f690>\n\n    def test_solve_invalid_board(solver):\n        board = [[1 for _ in range(9)] for _ in range(9)]\n        solver.board = board\n>       assert solver.solve() is False\nE       assert True is False\nE        +  where True = solve()\nE        +    where solve = <src.app.SudokuSolver object at 0x7f998979f690>.solve\n\ntests/test_app.py:36: AssertionError\n________________________________ test_is_valid _________________________________\n\nsolver = <src.app.SudokuSolver object at 0x7f9989788f50>\nsolved_board = [[5, 3, 4, 6, 7, 8, ...], [6, 7, 2, 1, 9, 5, ...], [1, 9, 8, 3, 4, 2, ...], [8, 5, 9, 7, 6, 1, ...], [4, 2, 6, 8, 5, 3, ...], [7, 1, 3, 9, 2, 4, ...], ...]\n\n    def test_is_valid(solver, solved_board):\n        solver.board = [row.copy() for row in solved_board]\n>       assert solver._is_valid(0, 0, 5) is True\nE       assert False is True\nE        +  where False = _is_valid(0, 0, 5)\nE        +    where _is_valid = <src.app.SudokuSolver object at 0x7f9989788f50>._is_valid\n\ntests/test_app.py:44: AssertionError\n________________________________ test_generate _________________________________\n\nsolver = <src.app.SudokuSolver object at 0x7f998979e6d0>\n\n    def test_generate(solver):\n        solver.generate()\n>       assert all(0 not in row for row in solver.board)\nE       assert False\nE        +  where False = all(<generator object test_generate.<locals>.<genexpr> at 0x7f9989703ed0>)\n\ntests/test_app.py:49: AssertionError\n_____________________________ test_fill_remaining ______________________________\n\nsolver = <src.app.SudokuSolver object at 0x7f99897acd90>\nsolved_board = [[5, 3, 4, 6, 7, 8, ...], [6, 7, 2, 1, 9, 5, ...], [1, 9, 8, 3, 4, 2, ...], [8, 5, 9, 7, 6, 1, ...], [4, 2, 6, 8, 5, 3, ...], [7, 1, 3, 9, 2, 4, ...], ...]\n\n    def test_fill_remaining(solver, solved_board):\n        solver.board = [row.copy() for row in solved_board]\n        for row in range(9):\n            for col in range(9):\n                solver.board[row][col] = 0\n        solver._fill_remaining()\n>       assert all(0 not in row for row in solver.board)\nE       assert False\nE        +  where False = all(<generator object test_fill_remaining.<locals>.<genexpr> at 0x7f9989703b90>)\n\ntests/test_app.py:78: AssertionError\n=========================== short test summary info ============================\nFAILED tests/test_app.py::test_solve_invalid_board - assert True is False\nFAILED tests/test_app.py::test_is_valid - assert False is True\nFAILED tests/test_app.py::test_generate - assert False\nFAILED tests/test_app.py::test_fill_remaining - assert False\n4 failed, 7 passed in 0.06s",
+  "tests_passed": false,
+  "timestamp_utc": "2026-02-10T19:20:41.849022+00:00",
+  "total_coverage_percent": 0.0
+}

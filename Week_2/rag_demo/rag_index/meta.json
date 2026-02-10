@@ -1,0 +1,26 @@
+{
+  "embed_model": "nomic-embed-text",
+  "dim": 768,
+  "chunks": [
+    {
+      "chunk_id": "API_Payments.txt::chunk_0000",
+      "source": "data_project_info/API_Payments.txt",
+      "text": "Endpoint: POST /v2/payments/refunds\nOwner: payments-service\nRetries:\n- Client retries: 2\n- Backoff: exponential (200ms, 800ms)\nErrors:\n- 409: duplicate refund request\n- 503: dependency unavailable"
+    },
+    {
+      "chunk_id": "ADR-001.md::chunk_0000",
+      "source": "data_project_info/ADR-001.md",
+      "text": "# ADR-001: Refund Retry Strategy\n\nDecision:\nUse exponential backoff with two retries for refund requests.\n\nRationale:\nReduces load on dependencies while maintaining user experience.\n\nConsequences:\nSlightly increased tail latency during partial outages."
+    },
+    {
+      "chunk_id": "CONTRIBUTING.md::chunk_0000",
+      "source": "data_project_info/CONTRIBUTING.md",
+      "text": "# Contributing\n\n## Branching\n- Use feature branches: feature/<ticket-id>-<short-name>\n- Merge via pull request only\n\n## Required PR checks\n- Unit tests must pass\n- Lint must pass\n- At least 1 approving review\n\n## Commit messages\nFormat: <type>: <summary>\nExample: feat: add refund retry policy"
+    },
+    {
+      "chunk_id": "RUNBOOK_Payments.md::chunk_0000",
+      "source": "data_project_info/RUNBOOK_Payments.md",
+      "text": "# Payments Runbook\n\n## Symptom: High p95 latency\nDiagnosis:\n1. Check dashboard: payments_service_latency_p95\n2. Check downstream dependency: redis latency\n3. Check error rate: http_5xx_rate\n\nMitigation:\n- Scale replicas by 2\n- Enable cache warmup job\n\nRollback procedure:\n- Revert last deploy using: deployctl rollback payments --to <previous>"
+    }
+  ]
+}
