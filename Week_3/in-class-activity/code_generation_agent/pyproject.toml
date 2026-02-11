@@ -3,7 +3,7 @@ requires = ["setuptools>=68", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "classroom-cli-agent"
+name = "code_generation_cli_agent"
 version = "0.4.0"
 description = "Ollama-based CLI agent with dynamic prompts for code generation"
 readme = "README.md"
@@ -16,10 +16,10 @@ dependencies = [
 ]
 
 [project.scripts]
-cca = "classroom_cli_agent.cli:main"
+cca = "code_generation_cli_agent.cli:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
 
 [tool.setuptools.package-data]
-classroom_cli_agent = ["prompts/*.yaml", "prompts/*.json"]
+code_generation_cli_agent = ["prompts/*.yaml", "prompts/*.json"]
