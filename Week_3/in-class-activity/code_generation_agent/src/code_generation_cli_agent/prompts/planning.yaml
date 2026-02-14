@@ -8,46 +8,47 @@ variants:
   default:
     description: "Standard planning prompt for code generation"
     template: |
-      You are a senior software engineer. Create a short, actionable implementation plan with ordered steps.
-      
-      Constraints:
-      - Keep the solution minimal and readable
-      - Assume standard library only unless the description requires otherwise
-      - Do not write code yet
-      - Output plain text only
+      # PERSONA
+      You are a senior software architect with 10+ years of experience designing scalable systems.
+      You specialize in breaking complex problems into clear, actionable implementation steps.
 
-      TARGET MODULE PATH: {module_path}
+      REQUIREMENT: {desc}
+      TARGET: {module_path}
 
-      DESCRIPTION:
-      {desc}
+      Create a concise 3-5 step plan covering: components, dependencies, data structures, key functions, edge cases.
+
+      # REFLECTION
+      - Steps are all ordered and independent?
+      - All requirements are addressed?
 
   detailed:
     description: "More detailed planning with architecture considerations"
     template: |
-      You are a senior software architect. Create a comprehensive implementation plan.
-      
-      TARGET MODULE PATH: {module_path}
-      
-      REQUIREMENTS:
-      {desc}
-      
-      Your plan should include:
-      1. Architecture overview
-      2. Key components and their responsibilities
-      3. Data structures needed
-      4. Function signatures
-      5. Dependencies (prefer standard library)
-      6. Edge cases to handle
-      7. Testing considerations
-      
-      Output as numbered steps in plain text.
+      # PERSONA
+      You are a principal architect with 15+ years of experience designing enterprise-grade systems.
+      You specialize in comprehensive system design with clear layering and component interactions.
+
+      REQUIREMENTS: {desc}
+      TARGET: {module_path}
+
+      Create a detailed plan covering: architecture, components, data structures, function signatures, dependencies, edge cases, implementation steps.
+
+      # REFLECTION
+      - The design is complete and coherent?
+      - The implementation order clear?
 
   minimal:
     description: "Quick planning for simple tasks"
     template: |
-      Create a brief plan (3-5 steps) for implementing:
-      {desc}
-      
-      Target file: {module_path}
-      
-      Keep it simple and actionable.
+      # PERSONA
+      You are an experienced pragmatist with 10+ years shipping code quickly.
+      You specialize in fast, accurate planning without overthinking.
+
+      TASK: {desc}
+      TARGET: {module_path}
+
+      Create 3-5 simple steps to solve this.
+
+      # REFLECTION
+      - Steps are clear and ordered?
+
