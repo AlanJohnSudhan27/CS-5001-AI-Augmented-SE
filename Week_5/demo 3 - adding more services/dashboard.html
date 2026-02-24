@@ -1,0 +1,1940 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>LocalClaw — Dashboard</title>
+<link href="https://fonts.googleapis.com/css2?family=Sora:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg:         #0f1117;
+  --bg1:        #151820;
+  --bg2:        #1c2030;
+  --bg3:        #242840;
+  --bg4:        #2d3150;
+  --teal:       #38d9b0;
+  --teal-dim:   rgba(56,217,176,0.12);
+  --teal-glow:  rgba(56,217,176,0.25);
+  --blue:       #5b8df8;
+  --blue-dim:   rgba(91,141,248,0.12);
+  --amber:      #f0a050;
+  --amber-dim:  rgba(240,160,80,0.12);
+  --rose:       #f06080;
+  --rose-dim:   rgba(240,96,128,0.12);
+  --green:      #4cd87a;
+  --green-dim:  rgba(76,216,122,0.12);
+  --text:       #e8eaf2;
+  --text2:      #9499b4;
+  --text3:      #565c7e;
+  --border:     rgba(255,255,255,0.06);
+  --border2:    rgba(255,255,255,0.1);
+  --shadow:     0 4px 24px rgba(0,0,0,0.35);
+  --shadow-lg:  0 12px 48px rgba(0,0,0,0.5);
+  --radius:     14px;
+  --radius-sm:  9px;
+  --font:       'Sora', sans-serif;
+  --mono:       'JetBrains Mono', monospace;
+}
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+html { scroll-behavior: smooth; }
+
+body {
+  font-family: var(--font);
+  background: var(--bg);
+  color: var(--text);
+  font-size: 14px;
+  line-height: 1.6;
+  min-height: 100vh;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Subtle background texture */
+body::before {
+  content: '';
+  position: fixed; inset: 0;
+  background:
+    radial-gradient(ellipse 80% 50% at 20% 0%, rgba(56,217,176,0.04) 0%, transparent 60%),
+    radial-gradient(ellipse 60% 40% at 80% 100%, rgba(91,141,248,0.05) 0%, transparent 60%);
+  pointer-events: none; z-index: 0;
+}
+
+/* ── SIDEBAR ── */
+.sidebar {
+  position: fixed; left: 0; top: 0; bottom: 0;
+  width: 256px;
+  background: var(--bg1);
+  border-right: 1px solid var(--border);
+  display: flex; flex-direction: column;
+  z-index: 100;
+  backdrop-filter: blur(20px);
+}
+
+.logo-area {
+  padding: 28px 22px 24px;
+  border-bottom: 1px solid var(--border);
+}
+
+.logo-row {
+  display: flex; align-items: center; gap: 12px;
+}
+
+.logo-gem {
+  position: relative;
+  width: 42px; height: 42px; border-radius: 12px;
+  background: linear-gradient(135deg, #1a3a35, #0d2020);
+  border: 1px solid rgba(56,217,176,0.3);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 20px;
+  box-shadow: 0 0 20px rgba(56,217,176,0.15), inset 0 1px 0 rgba(255,255,255,0.05);
+  flex-shrink: 0;
+}
+
+.logo-gem::after {
+  content: '';
+  position: absolute; top: -1px; left: 50%; transform: translateX(-50%);
+  width: 20px; height: 1px;
+  background: linear-gradient(90deg, transparent, var(--teal), transparent);
+  border-radius: 2px;
+}
+
+.logo-name {
+  font-size: 18px; font-weight: 700;
+  color: var(--text);
+  letter-spacing: -0.4px;
+}
+
+.logo-sub {
+  font-size: 11px; color: var(--text3);
+  margin-top: 1px; letter-spacing: 0.2px;
+}
+
+/* Nav */
+.nav { padding: 16px 12px; flex: 1; overflow-y: auto; }
+
+.nav-section {
+  font-size: 10px; font-weight: 600;
+  color: var(--text3); letter-spacing: 1px;
+  text-transform: uppercase;
+  padding: 10px 10px 6px;
+}
+
+.nav-item {
+  display: flex; align-items: center; gap: 10px;
+  padding: 10px 12px; border-radius: var(--radius-sm);
+  cursor: pointer; color: var(--text2);
+  font-size: 13.5px; font-weight: 500;
+  transition: all 0.18s; margin-bottom: 2px;
+  position: relative; user-select: none;
+}
+
+.nav-item:hover { background: var(--bg2); color: var(--text); }
+
+.nav-item.active {
+  background: var(--teal-dim);
+  color: var(--teal);
+}
+
+.nav-item.active::before {
+  content: '';
+  position: absolute; left: 0; top: 20%; bottom: 20%;
+  width: 3px; border-radius: 0 2px 2px 0;
+  background: var(--teal);
+  box-shadow: 0 0 8px var(--teal-glow);
+}
+
+.nav-icon { font-size: 16px; width: 22px; text-align: center; flex-shrink: 0; }
+
+.nav-chip {
+  margin-left: auto;
+  background: var(--teal);
+  color: var(--bg);
+  font-size: 10px; font-weight: 700;
+  padding: 2px 7px; border-radius: 20px;
+  min-width: 20px; text-align: center;
+}
+
+/* Sidebar footer */
+.sidebar-foot {
+  padding: 16px 14px;
+  border-top: 1px solid var(--border);
+}
+
+.model-pill {
+  background: var(--bg2);
+  border: 1px solid var(--border2);
+  border-radius: var(--radius-sm);
+  padding: 12px 14px;
+}
+
+.model-lbl { font-size: 10px; color: var(--text3); font-weight: 600; letter-spacing: 0.8px; text-transform: uppercase; margin-bottom: 5px; }
+.model-nm  { font-family: var(--mono); font-size: 13px; color: var(--text); font-weight: 500; }
+.model-st  { display: flex; align-items: center; gap: 5px; margin-top: 6px; font-size: 11px; font-weight: 500; }
+.model-st.ok  { color: var(--teal); }
+.model-st.err { color: var(--rose); }
+
+.pulse-dot {
+  width: 6px; height: 6px; border-radius: 50%;
+  background: currentColor;
+  animation: pdot 2s ease-in-out infinite;
+}
+@keyframes pdot { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:0.3;transform:scale(0.7)} }
+
+/* ── MAIN ── */
+.main {
+  margin-left: 256px;
+  min-height: 100vh;
+  position: relative; z-index: 1;
+}
+
+/* ── TOPBAR ── */
+.topbar {
+  background: rgba(15,17,23,0.85);
+  backdrop-filter: blur(20px);
+  border-bottom: 1px solid var(--border);
+  padding: 0 32px;
+  height: 64px;
+  display: flex; align-items: center; justify-content: space-between;
+  position: sticky; top: 0; z-index: 50;
+}
+
+.topbar-left { display: flex; align-items: center; gap: 16px; }
+
+.page-title {
+  font-size: 18px; font-weight: 600;
+  color: var(--text); letter-spacing: -0.3px;
+}
+
+.topbar-right { display: flex; align-items: center; gap: 12px; }
+
+.gw-badge {
+  display: flex; align-items: center; gap: 6px;
+  padding: 6px 14px;
+  border-radius: 20px; border: 1px solid;
+  font-size: 12px; font-weight: 600;
+  transition: all 0.3s;
+}
+.gw-badge.online  { background: var(--green-dim); border-color: rgba(76,216,122,0.25); color: var(--green); }
+.gw-badge.offline { background: var(--rose-dim);  border-color: rgba(240,96,128,0.25); color: var(--rose); }
+
+.clock-box {
+  font-family: var(--mono);
+  font-size: 13px; font-weight: 500;
+  color: var(--text2);
+  background: var(--bg1);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 7px 14px;
+  letter-spacing: 0.5px;
+}
+
+/* ── CONTENT ── */
+.content { padding: 28px 32px; }
+
+.view { display: none; animation: fadeup 0.22s ease; }
+.view.active { display: block; }
+
+@keyframes fadeup {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: none; }
+}
+
+/* ── STAT CARDS ── */
+.stats-row {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 16px;
+  margin-bottom: 28px;
+}
+
+.stat-card {
+  background: var(--bg1);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 22px 24px;
+  position: relative; overflow: hidden;
+  transition: border-color 0.2s, transform 0.2s;
+  cursor: default;
+}
+
+.stat-card:hover {
+  border-color: var(--border2);
+  transform: translateY(-2px);
+}
+
+.stat-card::before {
+  content: '';
+  position: absolute; top: 0; left: 0; right: 0; height: 1px;
+  background: linear-gradient(90deg, transparent 0%, var(--accent-line, var(--teal)) 50%, transparent 100%);
+  opacity: 0.5;
+}
+
+.stat-card.c-teal  { --accent-line: var(--teal); }
+.stat-card.c-blue  { --accent-line: var(--blue); }
+.stat-card.c-amber { --accent-line: var(--amber); }
+.stat-card.c-green { --accent-line: var(--green); }
+
+.stat-head {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-bottom: 14px;
+}
+
+.stat-icon {
+  width: 36px; height: 36px; border-radius: 10px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 17px;
+}
+
+.stat-icon.teal  { background: var(--teal-dim); }
+.stat-icon.blue  { background: var(--blue-dim); }
+.stat-icon.amber { background: var(--amber-dim); }
+.stat-icon.green { background: var(--green-dim); }
+
+.stat-badge {
+  font-size: 11px; font-weight: 600;
+  padding: 3px 9px; border-radius: 20px;
+}
+.stat-badge.up   { background: var(--green-dim); color: var(--green); }
+.stat-badge.warn { background: var(--amber-dim); color: var(--amber); }
+.stat-badge.neu  { background: var(--bg3); color: var(--text3); }
+
+.stat-num {
+  font-size: 34px; font-weight: 700;
+  color: var(--text); line-height: 1;
+  letter-spacing: -1px;
+  margin-bottom: 5px;
+}
+
+.stat-lbl { font-size: 12.5px; color: var(--text2); font-weight: 400; }
+
+/* ── GRID ── */
+.dash-grid {
+  display: grid;
+  grid-template-columns: 1fr 320px;
+  gap: 20px;
+}
+
+/* ── PANEL ── */
+.panel {
+  background: var(--bg1);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+
+.panel-head {
+  padding: 18px 22px 16px;
+  border-bottom: 1px solid var(--border);
+  display: flex; align-items: center; justify-content: space-between;
+}
+
+.panel-title {
+  font-size: 14px; font-weight: 600;
+  color: var(--text); letter-spacing: -0.2px;
+}
+
+.panel-body { padding: 6px 22px 18px; }
+
+.panel-action {
+  font-size: 12px; color: var(--teal); font-weight: 500;
+  cursor: pointer; padding: 4px 10px; border-radius: 6px;
+  background: none; border: none; transition: background 0.15s;
+}
+.panel-action:hover { background: var(--teal-dim); }
+
+/* ── EMAIL ROWS ── */
+.email-row {
+  display: flex; align-items: center; gap: 13px;
+  padding: 13px 0;
+  border-bottom: 1px solid var(--border);
+  cursor: pointer;
+  border-radius: 0;
+  transition: all 0.15s;
+  position: relative;
+}
+
+.email-row:last-child { border-bottom: none; }
+
+.email-row:hover {
+  background: var(--bg2);
+  padding-left: 10px; padding-right: 10px;
+  margin: 0 -10px;
+  border-radius: var(--radius-sm);
+}
+
+.email-av {
+  width: 38px; height: 38px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 14px; font-weight: 700; color: white;
+  flex-shrink: 0; letter-spacing: -0.5px;
+}
+
+.email-info { flex: 1; min-width: 0; }
+
+.email-from {
+  font-size: 13.5px; font-weight: 600; color: var(--text);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+
+.email-subj {
+  font-size: 12.5px; color: var(--text2);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  margin-top: 2px;
+}
+
+.email-meta {
+  display: flex; flex-direction: column; align-items: flex-end; gap: 5px;
+  flex-shrink: 0;
+}
+
+.email-time { font-size: 11px; color: var(--text3); font-family: var(--mono); }
+
+.tag {
+  font-size: 10px; font-weight: 600;
+  padding: 2px 8px; border-radius: 20px;
+}
+.tag.new     { background: var(--teal-dim);  color: var(--teal); }
+.tag.replied { background: var(--green-dim); color: var(--green); }
+.tag.draft   { background: var(--amber-dim); color: var(--amber); }
+.tag.skipped { background: var(--bg3);       color: var(--text3); }
+.tag.read    { background: var(--bg3);       color: var(--text3); }
+
+/* ── IDENTITY CARD ── */
+.identity-card {
+  background: linear-gradient(160deg, var(--bg2) 0%, var(--bg1) 100%);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 20px;
+  margin-bottom: 16px;
+  position: relative; overflow: hidden;
+}
+
+.identity-card::after {
+  content: '';
+  position: absolute; top: -40px; right: -40px;
+  width: 140px; height: 140px; border-radius: 50%;
+  background: radial-gradient(circle, var(--teal-dim), transparent 70%);
+  pointer-events: none;
+}
+
+.id-top { display: flex; align-items: center; gap: 14px; margin-bottom: 16px; }
+
+.id-avatar {
+  width: 50px; height: 50px; border-radius: 14px;
+  background: linear-gradient(135deg, #1a3a35, #0d2020);
+  border: 1px solid rgba(56,217,176,0.3);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 24px;
+  box-shadow: 0 4px 16px rgba(56,217,176,0.1);
+}
+
+.id-name { font-size: 17px; font-weight: 700; color: var(--text); letter-spacing: -0.3px; }
+.id-role { font-size: 12px; color: var(--text3); margin-top: 2px; }
+.id-mood { display: flex; align-items: center; gap: 5px; margin-top: 6px; font-size: 11px; color: var(--teal); }
+
+.id-stats { display: grid; grid-template-columns: repeat(3,1fr); gap: 1px; margin-top: 4px; background: var(--border); border-radius: 8px; overflow: hidden; }
+.idstat { background: var(--bg2); padding: 10px; text-align: center; }
+.idstat-n { font-size: 19px; font-weight: 700; color: var(--text); }
+.idstat-l { font-size: 10px; color: var(--text3); margin-top: 2px; }
+
+/* ── SYS STATUS ── */
+.sys-row {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 10px 0; border-bottom: 1px solid var(--border);
+}
+.sys-row:last-child { border-bottom: none; }
+.sys-lbl { font-size: 13px; color: var(--text2); }
+.sys-val { font-size: 11.5px; font-weight: 600; padding: 3px 10px; border-radius: 20px; }
+.sys-val.ok   { background: var(--green-dim); color: var(--green); }
+.sys-val.err  { background: var(--rose-dim);  color: var(--rose); }
+.sys-val.warn { background: var(--amber-dim); color: var(--amber); }
+.sys-val.neu  { background: var(--bg3);       color: var(--text3); }
+
+/* ── MEMORY ── */
+.mem-add-row { display: flex; gap: 10px; margin-bottom: 20px; }
+
+.inp {
+  flex: 1; padding: 10px 14px;
+  background: var(--bg2); border: 1px solid var(--border2);
+  border-radius: var(--radius-sm);
+  font-family: var(--font); font-size: 13px; color: var(--text);
+  transition: border-color 0.15s, background 0.15s;
+}
+.inp::placeholder { color: var(--text3); }
+.inp:focus { outline: none; border-color: var(--teal); background: var(--bg3); }
+
+.mem-item {
+  display: flex; align-items: center; gap: 14px;
+  padding: 13px 16px; margin-bottom: 8px;
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  transition: border-color 0.15s;
+}
+.mem-item:hover { border-color: var(--border2); }
+.mem-key { font-family: var(--mono); font-size: 11.5px; color: var(--teal); min-width: 130px; font-weight: 500; }
+.mem-val { flex: 1; font-size: 13px; color: var(--text2); }
+.mem-ts  { font-size: 11px; color: var(--text3); flex-shrink: 0; font-family: var(--mono); }
+
+/* ── CRON ── */
+.cron-item {
+  display: flex; align-items: center; gap: 14px;
+  padding: 15px 0; border-bottom: 1px solid var(--border);
+}
+.cron-item:last-child { border-bottom: none; }
+.cron-icon { font-size: 22px; width: 40px; text-align: center; flex-shrink: 0; }
+.cron-info { flex: 1; }
+.cron-name { font-size: 13.5px; font-weight: 600; color: var(--text); }
+.cron-sch  { font-family: var(--mono); font-size: 11px; color: var(--text3); margin-top: 2px; }
+.cron-last { font-size: 11px; color: var(--text3); margin-top: 2px; }
+
+/* Toggle */
+.tog {
+  width: 42px; height: 24px; border-radius: 12px;
+  background: var(--bg3); border: 1px solid var(--border2);
+  position: relative; cursor: pointer; flex-shrink: 0;
+  transition: background 0.25s, border-color 0.25s;
+}
+.tog.on { background: var(--teal); border-color: var(--teal); }
+.tog::after {
+  content: '';
+  position: absolute; top: 3px; left: 3px;
+  width: 16px; height: 16px; border-radius: 50%;
+  background: var(--text2);
+  box-shadow: 0 1px 4px rgba(0,0,0,0.4);
+  transition: left 0.25s, background 0.25s;
+}
+.tog.on::after { left: 21px; background: white; }
+
+/* ── LOGS ── */
+.log-line {
+  display: flex; gap: 14px; align-items: baseline;
+  padding: 7px 0; border-bottom: 1px solid var(--border);
+  font-size: 12.5px;
+}
+.log-line:last-child { border-bottom: none; }
+.log-ts  { font-family: var(--mono); color: var(--text3); flex-shrink: 0; font-size: 11px; }
+.log-lvl { flex-shrink: 0; width: 38px; font-weight: 700; font-family: var(--mono); font-size: 10px; letter-spacing: 0.5px; }
+.log-lvl.info  { color: var(--blue); }
+.log-lvl.ok    { color: var(--teal); }
+.log-lvl.warn  { color: var(--amber); }
+.log-lvl.error { color: var(--rose); }
+.log-msg { color: var(--text2); }
+
+/* ── SETTINGS ── */
+.settings-group { margin-bottom: 32px; }
+.settings-group-title { font-size: 11px; font-weight: 600; color: var(--text3); text-transform: uppercase; letter-spacing: 1px; margin-bottom: 14px; }
+
+.setting-row {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 15px 0; border-bottom: 1px solid var(--border);
+}
+.setting-row:last-child { border-bottom: none; }
+.setting-lbl { font-size: 14px; color: var(--text); font-weight: 500; }
+.setting-sub { font-size: 12px; color: var(--text3); margin-top: 3px; }
+
+.num-inp {
+  width: 80px; padding: 8px 12px;
+  background: var(--bg2); border: 1px solid var(--border2);
+  border-radius: var(--radius-sm); font-family: var(--mono);
+  font-size: 13px; color: var(--text); text-align: center;
+}
+.num-inp:focus { outline: none; border-color: var(--teal); }
+
+/* ── BUTTONS ── */
+.btn {
+  padding: 9px 20px; border-radius: var(--radius-sm);
+  font-family: var(--font); font-size: 13px; font-weight: 600;
+  cursor: pointer; transition: all 0.18s; border: none;
+  display: inline-flex; align-items: center; gap: 6px;
+}
+.btn-teal {
+  background: var(--teal); color: var(--bg);
+  box-shadow: 0 2px 12px rgba(56,217,176,0.3);
+}
+.btn-teal:hover { filter: brightness(1.1); box-shadow: 0 4px 20px rgba(56,217,176,0.4); transform: translateY(-1px); }
+.btn-ghost {
+  background: var(--bg2); color: var(--text2);
+  border: 1px solid var(--border2);
+}
+.btn-ghost:hover { background: var(--bg3); color: var(--text); }
+.btn-danger { background: var(--rose-dim); color: var(--rose); border: 1px solid rgba(240,96,128,0.2); }
+.btn-danger:hover { background: var(--rose); color: white; }
+.btn-sm { padding: 6px 14px; font-size: 12px; }
+.btn-xs { padding: 4px 10px; font-size: 11px; }
+
+/* ── MODAL ── */
+.overlay {
+  display: none; position: fixed; inset: 0;
+  background: rgba(8,10,16,0.75);
+  backdrop-filter: blur(8px);
+  z-index: 500; align-items: center; justify-content: center; padding: 24px;
+}
+.overlay.open { display: flex; }
+
+.modal {
+  background: var(--bg1);
+  border: 1px solid var(--border2);
+  border-radius: 18px;
+  box-shadow: var(--shadow-lg);
+  max-width: 620px; width: 100%;
+  max-height: 88vh; overflow-y: auto;
+  animation: fadeup 0.22s ease;
+  position: relative;
+}
+
+.modal-top {
+  padding: 26px 26px 20px;
+  border-bottom: 1px solid var(--border);
+  display: flex; align-items: flex-start; gap: 16px;
+}
+
+.modal-subj {
+  font-size: 18px; font-weight: 700;
+  color: var(--text); letter-spacing: -0.4px;
+  flex: 1; line-height: 1.35;
+}
+
+.close-btn {
+  width: 32px; height: 32px; border-radius: 8px;
+  background: var(--bg2); border: 1px solid var(--border);
+  color: var(--text3); cursor: pointer; font-size: 16px;
+  display: flex; align-items: center; justify-content: center;
+  transition: all 0.15s; flex-shrink: 0;
+}
+.close-btn:hover { background: var(--bg3); color: var(--text); }
+
+.modal-body { padding: 22px 26px 26px; }
+
+.mfield { margin-bottom: 18px; }
+.mfield-lbl { font-size: 10.5px; font-weight: 600; color: var(--text3); text-transform: uppercase; letter-spacing: 0.8px; margin-bottom: 7px; }
+.mfield-val { font-size: 13.5px; color: var(--text2); }
+
+.email-body-box {
+  background: var(--bg2); border: 1px solid var(--border);
+  border-radius: var(--radius-sm); padding: 14px;
+  font-size: 13px; color: var(--text2); line-height: 1.7;
+  max-height: 140px; overflow-y: auto;
+}
+
+.reply-label {
+  display: flex; align-items: center; gap: 8px;
+  margin-bottom: 8px;
+}
+
+.ai-badge {
+  background: var(--teal-dim); color: var(--teal);
+  font-size: 10px; font-weight: 700; padding: 2px 8px;
+  border-radius: 4px; border: 1px solid rgba(56,217,176,0.2);
+}
+
+textarea.reply-ta {
+  width: 100%; min-height: 130px;
+  background: var(--bg2); border: 1px solid var(--border2);
+  border-radius: var(--radius-sm);
+  font-family: var(--font); font-size: 13.5px; color: var(--text);
+  padding: 13px 15px; resize: vertical; line-height: 1.65;
+  transition: border-color 0.15s, background 0.15s;
+}
+textarea.reply-ta::placeholder { color: var(--text3); }
+textarea.reply-ta:focus { outline: none; border-color: var(--teal); background: var(--bg3); }
+
+.modal-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 18px; }
+
+/* ── EMPTY ── */
+.empty {
+  text-align: center; padding: 48px 20px;
+  color: var(--text3);
+}
+.empty-ico { font-size: 36px; margin-bottom: 12px; opacity: 0.5; }
+.empty-txt { font-size: 13.5px; }
+
+/* ── SECTION HEADER ── */
+.section-head {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-bottom: 20px;
+}
+.section-title {
+  font-size: 20px; font-weight: 700;
+  color: var(--text); letter-spacing: -0.5px;
+}
+
+/* ── DIVIDER ── */
+.divider { height: 1px; background: var(--border); margin: 18px 0; }
+
+/* ── TOAST ── */
+#toast {
+  position: fixed; bottom: 24px; right: 24px; z-index: 9999;
+  background: var(--bg2); border: 1px solid var(--border2);
+  color: var(--text); padding: 12px 20px; border-radius: var(--radius-sm);
+  font-size: 13px; font-weight: 500;
+  box-shadow: var(--shadow);
+  opacity: 0; transform: translateY(10px);
+  transition: all 0.25s; pointer-events: none;
+}
+#toast.show { opacity: 1; transform: none; }
+
+/* ── SCROLLBARS ── */
+::-webkit-scrollbar { width: 5px; height: 5px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--bg3); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: var(--bg4); }
+
+/* ── STAGGER ANIMATIONS ── */
+.stat-card { animation: fadeup 0.4s ease both; }
+.stat-card:nth-child(1) { animation-delay: 0.05s; }
+.stat-card:nth-child(2) { animation-delay: 0.10s; }
+.stat-card:nth-child(3) { animation-delay: 0.15s; }
+.stat-card:nth-child(4) { animation-delay: 0.20s; }
+
+/* ── GH TABS ── */
+.gh-tabs { display:flex; gap:4px; background:var(--bg2); border-radius:var(--radius-sm); padding:3px; }
+.gh-tab-btn {
+  padding:5px 13px; border-radius:6px; border:none; cursor:pointer;
+  font-size:12px; font-weight:500; font-family:var(--font);
+  background:transparent; color:var(--text2); transition:all 0.15s;
+}
+.gh-tab-btn:hover { color:var(--text); }
+.gh-tab-btn.active { background:var(--bg4); color:var(--teal); }
+
+/* ── REPO GRID ── */
+.repo-grid {
+  display:grid;
+  grid-template-columns:repeat(auto-fill, minmax(280px, 1fr));
+  gap:12px; margin-bottom:16px;
+}
+.repo-card {
+  background:var(--bg2); border:1px solid var(--border);
+  border-radius:var(--radius-sm); padding:14px 16px;
+  cursor:pointer; transition:border-color 0.2s, background 0.2s;
+}
+.repo-card:hover { border-color:var(--border2); background:var(--bg3); }
+.repo-card.active { border-color:var(--teal); background:var(--teal-dim); }
+.repo-name {
+  font-weight:600; font-size:13px; color:var(--teal);
+  margin-bottom:4px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+}
+.repo-desc {
+  font-size:12px; color:var(--text2); margin-bottom:8px;
+  display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical;
+  overflow:hidden; min-height:32px;
+}
+.repo-meta { display:flex; gap:8px; align-items:center; font-size:11px; color:var(--text3); flex-wrap:wrap; }
+.repo-lang-dot { width:10px; height:10px; border-radius:50%; display:inline-block; vertical-align:middle; margin-right:3px; }
+.repo-stat { display:flex; align-items:center; gap:2px; }
+
+/* ── ACTIVITY PANEL ── */
+.activity-panel {
+  background:var(--bg2); border:1px solid var(--border2);
+  border-radius:var(--radius-sm); margin-bottom:12px; overflow:hidden;
+}
+.activity-head {
+  padding:10px 14px; background:var(--bg3);
+  font-size:12px; font-weight:600; color:var(--text);
+  display:flex; justify-content:space-between; align-items:center;
+}
+.activity-item {
+  padding:9px 14px; border-bottom:1px solid var(--border); font-size:12px;
+}
+.activity-item:last-child { border-bottom:none; }
+.activity-item-title { color:var(--text); margin-bottom:3px; line-height:1.4; }
+.activity-item-meta { color:var(--text3); font-size:11px; display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+</style>
+</head>
+<body>
+
+<!-- SIDEBAR -->
+<aside class="sidebar">
+  <div class="logo-area">
+    <div class="logo-row">
+      <div class="logo-gem">🦞</div>
+      <div>
+        <div class="logo-name">LocalClaw</div>
+        <div class="logo-sub">Personal AI Gateway</div>
+      </div>
+    </div>
+  </div>
+
+  <nav class="nav">
+    <div class="nav-section">Overview</div>
+    <div class="nav-item active" onclick="showView('dashboard',this)">
+      <span class="nav-icon">⊞</span> Dashboard
+    </div>
+    <div class="nav-item" onclick="showView('emails',this)">
+      <span class="nav-icon">✉</span> Emails
+      <span class="nav-chip" id="unread-chip">0</span>
+    </div>
+    <div class="nav-item" onclick="showView('github',this)">
+      <span class="nav-icon">🐙</span> GitHub
+      <span class="nav-chip" id="gh-chip">0</span>
+    </div>
+    <div class="nav-item" onclick="showView('canvas',this)">
+      <span class="nav-icon">📚</span> Canvas
+      <span class="nav-chip" id="cv-chip">0</span>
+    </div>
+
+    <div class="nav-section">Intelligence</div>
+    <div class="nav-item" onclick="showView('memory',this)">
+      <span class="nav-icon">◈</span> Memory
+    </div>
+    <div class="nav-item" onclick="showView('cron',this)">
+      <span class="nav-icon">◷</span> Cron Jobs
+    </div>
+
+    <div class="nav-section">System</div>
+    <div class="nav-item" onclick="showView('logs',this)">
+      <span class="nav-icon">≡</span> Logs
+    </div>
+    <div class="nav-item" onclick="showView('settings',this)">
+      <span class="nav-icon">⚙</span> Settings
+    </div>
+  </nav>
+
+  <div class="sidebar-foot">
+    <div class="model-pill">
+      <div class="model-lbl">Active Model</div>
+      <div class="model-nm" id="sb-model">—</div>
+      <div class="model-st ok" id="sb-ollama">
+        <div class="pulse-dot"></div> Checking…
+      </div>
+    </div>
+  </div>
+</aside>
+
+<!-- MAIN -->
+<div class="main">
+
+  <!-- TOPBAR -->
+  <header class="topbar">
+    <div class="topbar-left">
+      <div class="page-title" id="page-title">Dashboard</div>
+    </div>
+    <div class="topbar-right">
+      <div class="gw-badge offline" id="gw-badge">
+        <div class="pulse-dot"></div>
+        <span id="gw-txt">Connecting…</span>
+      </div>
+      <div class="clock-box" id="clock">--:--:--</div>
+    </div>
+  </header>
+
+  <!-- CONTENT -->
+  <div class="content">
+
+    <!-- ══ DASHBOARD ══ -->
+    <div class="view active" id="view-dashboard">
+      <div class="stats-row">
+        <div class="stat-card c-teal">
+          <div class="stat-head">
+            <div class="stat-icon teal">📨</div>
+            <div class="stat-badge neu" id="tr-proc">all time</div>
+          </div>
+          <div class="stat-num" id="s-proc">—</div>
+          <div class="stat-lbl">Emails Processed</div>
+        </div>
+        <div class="stat-card c-green">
+          <div class="stat-head">
+            <div class="stat-icon green">✓</div>
+            <div class="stat-badge up" id="tr-replied">—</div>
+          </div>
+          <div class="stat-num" id="s-replied">—</div>
+          <div class="stat-lbl">Replies Sent</div>
+        </div>
+        <div class="stat-card c-amber">
+          <div class="stat-head">
+            <div class="stat-icon amber">⧗</div>
+            <div class="stat-badge warn" id="tr-pend">—</div>
+          </div>
+          <div class="stat-num" id="s-pend">—</div>
+          <div class="stat-lbl">Pending</div>
+        </div>
+        <div class="stat-card c-blue">
+          <div class="stat-head">
+            <div class="stat-icon blue">◑</div>
+            <div class="stat-badge neu">uptime</div>
+          </div>
+          <div class="stat-num" id="s-uptime">—</div>
+          <div class="stat-lbl">Running For</div>
+        </div>
+      </div>
+
+      <div class="dash-grid">
+        <!-- Recent emails -->
+        <div class="panel">
+          <div class="panel-head">
+            <div class="panel-title">Recent Emails</div>
+            <button class="panel-action" onclick="switchToEmails()">View all</button>
+          </div>
+          <div class="panel-body">
+            <div id="dash-emails">
+              <div class="empty"><div class="empty-ico">📭</div><div class="empty-txt">No emails yet</div></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Right col -->
+        <div>
+          <!-- Identity -->
+          <div class="identity-card">
+            <div class="id-top">
+              <div class="id-avatar">🦞</div>
+              <div>
+                <div class="id-name" id="id-name">LocalClaw</div>
+                <div class="id-role" id="id-role">Personal AI · Email Assistant</div>
+                <div class="id-mood"><div class="pulse-dot"></div> Active</div>
+              </div>
+            </div>
+            <div class="id-stats">
+              <div class="idstat">
+                <div class="idstat-n" id="id-proc">—</div>
+                <div class="idstat-l">Processed</div>
+              </div>
+              <div class="idstat">
+                <div class="idstat-n" id="id-repl">—</div>
+                <div class="idstat-l">Replied</div>
+              </div>
+              <div class="idstat">
+                <div class="idstat-n" id="id-sndr">—</div>
+                <div class="idstat-l">Senders</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- System status -->
+          <div class="panel">
+            <div class="panel-head"><div class="panel-title">System Status</div></div>
+            <div class="panel-body" style="padding-top:4px;">
+              <div class="sys-row"><span class="sys-lbl">Gateway</span><span id="sys-gw" class="sys-val ok">Online</span></div>
+              <div class="sys-row"><span class="sys-lbl">Ollama</span><span id="sys-ollama" class="sys-val neu">—</span></div>
+              <div class="sys-row"><span class="sys-lbl">Hotmail Auth</span><span id="sys-hm" class="sys-val neu">—</span></div>
+              <div class="sys-row"><span class="sys-lbl">GitHub Auth</span><span id="sys-gh" class="sys-val neu">—</span></div>
+              <div class="sys-row"><span class="sys-lbl">Canvas Auth</span><span id="sys-cv" class="sys-val neu">—</span></div>
+              <div class="sys-row"><span class="sys-lbl">Dry Run</span><span id="sys-dry" class="sys-val warn">—</span></div>
+              <div class="sys-row"><span class="sys-lbl">Poll Every</span><span id="sys-poll" class="sys-val neu">—</span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ══ GITHUB ══ -->
+    <div class="view" id="view-github">
+      <div class="section-head">
+        <div class="section-title">GitHub</div>
+        <div style="display:flex;gap:8px;align-items:center;">
+          <div class="gh-tabs">
+            <button id="ghtb-repos"  class="gh-tab-btn active" onclick="showGhTab('repos')">📦 Repos</button>
+            <button id="ghtb-notifs" class="gh-tab-btn"        onclick="showGhTab('notifs')">🔔 Notifications</button>
+          </div>
+          <button class="btn btn-ghost btn-sm" onclick="loadGitHub()">↺ Refresh</button>
+        </div>
+      </div>
+      <div class="panel" style="margin-bottom:16px;">
+        <div class="panel-head"><div class="panel-title">GitHub Gateway Status</div></div>
+        <div class="panel-body" style="padding-top:4px;">
+          <div class="sys-row"><span class="sys-lbl">Auth</span><span id="gh-auth" class="sys-val neu">—</span></div>
+          <div class="sys-row"><span class="sys-lbl">Auto Reply</span><span id="gh-auto" class="sys-val neu">—</span></div>
+          <div class="sys-row"><span class="sys-lbl">Poll Every</span><span id="gh-poll" class="sys-val neu">—</span></div>
+          <div class="sys-row"><span class="sys-lbl">Dry Run</span><span id="gh-dry" class="sys-val neu">—</span></div>
+        </div>
+      </div>
+      <!-- Repos pane -->
+      <div id="gh-pane-repos">
+        <div id="gh-repos-grid" class="repo-grid">
+          <div class="empty"><div class="empty-ico">📦</div><div class="empty-txt">Loading repos…</div></div>
+        </div>
+        <div id="gh-activity-panel"></div>
+      </div>
+      <!-- Notifications pane -->
+      <div id="gh-pane-notifs" style="display:none;">
+        <div class="panel">
+          <div class="panel-body" style="padding-top:8px;">
+            <div id="all-notifs"><div class="empty"><div class="empty-ico">🐙</div><div class="empty-txt">No notifications processed yet</div></div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ══ CANVAS ══ -->
+    <div class="view" id="view-canvas">
+      <div class="section-head">
+        <div class="section-title">Canvas LMS</div>
+        <div style="display:flex;gap:8px;align-items:center;">
+          <div class="gh-tabs">
+            <button id="cvtb-courses" class="gh-tab-btn active" onclick="showCvTab('courses')">📚 Courses</button>
+            <button id="cvtb-convos"  class="gh-tab-btn"        onclick="showCvTab('convos')">💬 Conversations</button>
+          </div>
+          <button class="btn btn-ghost btn-sm" onclick="loadCanvas()">↺ Refresh</button>
+        </div>
+      </div>
+      <div class="panel" style="margin-bottom:16px;">
+        <div class="panel-head"><div class="panel-title">Canvas Gateway Status</div></div>
+        <div class="panel-body" style="padding-top:4px;">
+          <div class="sys-row"><span class="sys-lbl">Auth</span><span id="cv-auth" class="sys-val neu">—</span></div>
+          <div class="sys-row"><span class="sys-lbl">Auto Reply</span><span id="cv-auto" class="sys-val neu">—</span></div>
+          <div class="sys-row"><span class="sys-lbl">Poll Every</span><span id="cv-poll" class="sys-val neu">—</span></div>
+          <div class="sys-row"><span class="sys-lbl">Dry Run</span><span id="cv-dry" class="sys-val neu">—</span></div>
+          <div class="sys-row"><span class="sys-lbl">Base URL</span><span id="cv-url" class="sys-val neu" style="font-size:10px;max-width:200px;overflow:hidden;text-overflow:ellipsis;">—</span></div>
+        </div>
+      </div>
+      <!-- Courses pane -->
+      <div id="cv-pane-courses">
+        <div id="cv-courses-grid" class="repo-grid">
+          <div class="empty"><div class="empty-ico">📚</div><div class="empty-txt">Loading courses…</div></div>
+        </div>
+        <div id="cv-activity-panel"></div>
+      </div>
+      <!-- Conversations pane -->
+      <div id="cv-pane-convos" style="display:none;">
+        <div class="panel">
+          <div class="panel-body" style="padding-top:8px;">
+            <div id="cv-all-convos"><div class="empty"><div class="empty-ico">💬</div><div class="empty-txt">No conversations processed yet</div></div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ══ EMAILS ══ -->
+    <div class="view" id="view-emails">
+      <div class="section-head">
+        <div class="section-title">All Emails</div>
+        <button class="btn btn-ghost btn-sm" onclick="loadEmails()">↺ Refresh</button>
+      </div>
+      <div class="panel">
+        <div class="panel-body" style="padding-top:8px;">
+          <div id="all-emails"><div class="empty"><div class="empty-ico">📭</div><div class="empty-txt">No emails processed yet</div></div></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ══ MEMORY ══ -->
+    <div class="view" id="view-memory">
+      <div class="section-head"><div class="section-title">Memory</div></div>
+      <div class="panel" style="margin-bottom:18px;">
+        <div class="panel-head"><div class="panel-title">Add Memory</div></div>
+        <div class="panel-body">
+          <div class="mem-add-row">
+            <input class="inp" type="text" id="mem-k" placeholder="Key  (e.g. preferred_language)" style="flex:1;" />
+            <input class="inp" type="text" id="mem-v" placeholder="Value" style="flex:2;" />
+            <button class="btn btn-teal" onclick="addMemory()">+ Add</button>
+          </div>
+        </div>
+      </div>
+      <div class="panel">
+        <div class="panel-head"><div class="panel-title">Stored Memories</div></div>
+        <div class="panel-body">
+          <div id="mem-list"><div class="empty"><div class="empty-ico">🧠</div><div class="empty-txt">No memories yet</div></div></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ══ CRON ══ -->
+    <div class="view" id="view-cron">
+      <div class="section-head"><div class="section-title">Cron Jobs</div></div>
+      <div class="panel">
+        <div class="panel-body" style="padding-top:8px;">
+          <div id="cron-list"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ══ LOGS ══ -->
+    <div class="view" id="view-logs">
+      <div class="section-head">
+        <div class="section-title">System Logs</div>
+        <button class="btn btn-ghost btn-sm" onclick="loadLogs()">↺ Refresh</button>
+      </div>
+      <div class="panel">
+        <div class="panel-body" style="padding-top:4px;">
+          <div id="log-list"><div class="empty"><div class="empty-txt">No logs yet</div></div></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ══ SETTINGS ══ -->
+    <div class="view" id="view-settings">
+      <div class="section-head"><div class="section-title">Settings</div></div>
+      <div class="panel">
+        <div class="panel-body">
+
+          <div class="settings-group">
+            <div class="settings-group-title">Gateway Behaviour</div>
+            <div class="setting-row">
+              <div>
+                <div class="setting-lbl">Dry Run</div>
+                <div class="setting-sub">Generate AI replies without actually sending emails</div>
+              </div>
+              <div class="tog" id="dry-tog" onclick="toggleDryRun()"></div>
+            </div>
+            <div class="setting-row">
+              <div>
+                <div class="setting-lbl">Poll Interval</div>
+                <div class="setting-sub">How often LocalClaw checks your inbox (seconds)</div>
+              </div>
+              <div style="display:flex;gap:8px;align-items:center;">
+                <input type="number" class="num-inp" id="poll-inp" value="30" min="10" max="3600" />
+                <button class="btn btn-ghost btn-sm" onclick="savePoll()">Save</button>
+              </div>
+            </div>
+          </div>
+
+          <div class="settings-group">
+            <div class="settings-group-title">Account</div>
+            <div class="setting-row">
+              <div><div class="setting-lbl">Email</div><div class="setting-sub">Connected Hotmail account</div></div>
+              <div style="font-size:13px;color:var(--text2);font-family:var(--mono);" id="cfg-email">—</div>
+            </div>
+            <div class="setting-row">
+              <div><div class="setting-lbl">Owner</div><div class="setting-sub">Configured in config.py</div></div>
+              <div style="font-size:13px;color:var(--text2);" id="cfg-owner">—</div>
+            </div>
+            <div class="setting-row">
+              <div><div class="setting-lbl">AI Model</div><div class="setting-sub">Local Ollama model</div></div>
+              <div style="font-size:13px;font-weight:600;color:var(--teal);font-family:var(--mono);" id="cfg-model">—</div>
+            </div>
+          </div>
+
+        </div>
+      </div>
+    </div>
+
+  </div><!-- /content -->
+</div><!-- /main -->
+
+<!-- EMAIL MODAL -->
+<div class="overlay" id="modal">
+  <div class="modal">
+    <div class="modal-top">
+      <div class="modal-subj" id="m-subj">—</div>
+      <button class="close-btn" onclick="closeModal()">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="mfield">
+        <div class="mfield-lbl">From</div>
+        <div class="mfield-val" id="m-from">—</div>
+      </div>
+      <div class="mfield">
+        <div class="mfield-lbl">Received</div>
+        <div class="mfield-val" id="m-time">—</div>
+      </div>
+      <div class="mfield">
+        <div class="mfield-lbl">Message</div>
+        <div class="email-body-box" id="m-body">—</div>
+      </div>
+      <div class="divider"></div>
+      <div>
+        <div class="reply-label">
+          <div class="mfield-lbl" style="margin:0;">AI Reply Draft</div>
+          <div class="ai-badge">✦ AI</div>
+        </div>
+        <textarea class="reply-ta" id="m-reply" placeholder="Generating reply…"></textarea>
+      </div>
+      <div class="modal-actions">
+        <button class="btn btn-ghost" onclick="closeModal()">Discard</button>
+        <button class="btn btn-teal" id="send-btn" onclick="sendReply()">Send Reply →</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+const API    = 'http://127.0.0.1:5000/api';
+const API_GH = 'http://127.0.0.1:5001/api';
+let _status   = null;
+let _curEmail = null;
+let _curNotif = null;
+
+// ── CLOCK ─────────────────────────────────────────────────────────────────────
+function tick() { document.getElementById('clock').textContent = new Date().toTimeString().slice(0,8); }
+setInterval(tick, 1000); tick();
+
+// ── TOAST ─────────────────────────────────────────────────────────────────────
+function toast(msg, ms = 2800) {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.classList.add('show');
+  clearTimeout(el._t);
+  el._t = setTimeout(() => el.classList.remove('show'), ms);
+}
+
+// ── NAV ───────────────────────────────────────────────────────────────────────
+const TITLES = { dashboard:'Dashboard', emails:'Emails', github:'GitHub', canvas:'Canvas LMS', memory:'Memory', cron:'Cron Jobs', logs:'Logs', settings:'Settings' };
+
+function showView(id, el) {
+  document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+  document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+  document.getElementById('view-' + id).classList.add('active');
+  el.classList.add('active');
+  document.getElementById('page-title').textContent = TITLES[id] || id;
+  if (id === 'emails')   loadEmails();
+  if (id === 'github')   loadGitHub();
+  if (id === 'canvas')   loadCanvas();
+  if (id === 'memory')   loadMemory();
+  if (id === 'logs')     loadLogs();
+  if (id === 'cron')     renderCron(_status?.cron_jobs);
+  if (id === 'settings') loadSettings();
+}
+
+function switchToEmails() {
+  const el = document.querySelectorAll('.nav-item')[1];
+  showView('emails', el);
+}
+
+// ── API ───────────────────────────────────────────────────────────────────────
+async function api(path, opts = {}) {
+  try {
+    const r = await fetch(API + path, { headers:{'Content-Type':'application/json'}, ...opts });
+    return r.json();
+  } catch { return null; }
+}
+
+async function apiGh(path, opts = {}) {
+  try {
+    const r = await fetch(API_GH + path, { headers:{'Content-Type':'application/json'}, ...opts });
+    return r.json();
+  } catch { return null; }
+}
+
+// ── STATUS ────────────────────────────────────────────────────────────────────
+async function pollStatus() {
+  const d = await api('/status');
+  if (!d) { setOffline(); return; }
+  _status = d;
+  applyStatus(d);
+}
+
+function setOffline() {
+  const b = document.getElementById('gw-badge');
+  b.className = 'gw-badge offline';
+  document.getElementById('gw-txt').textContent = 'Offline';
+}
+
+function applyStatus(d) {
+  document.getElementById('gw-badge').className = 'gw-badge online';
+  document.getElementById('gw-txt').textContent = 'Online';
+
+  const s = d.stats || {};
+  const proc    = s.emails_processed || 0;
+  const replied = s.replies_sent || 0;
+  const skipped = s.emails_skipped || 0;
+  const pending = Math.max(0, proc - replied - skipped);
+
+  animNum('s-proc', proc);
+  animNum('s-replied', replied);
+  animNum('s-pend', pending);
+  animNum('id-proc', proc);
+  animNum('id-repl', replied);
+
+  const u = d.uptime_seconds || 0;
+  const h = Math.floor(u/3600), m = Math.floor((u%3600)/60);
+  document.getElementById('s-uptime').textContent = h > 0 ? `${h}h ${m}m` : `${m}m`;
+
+  const id = d.identity || {};
+  document.getElementById('id-name').textContent = id.name || 'LocalClaw';
+  document.getElementById('id-role').textContent = `Owner: ${id.owner || '—'} · Email Assistant`;
+
+  const model = d.model || '—';
+  document.getElementById('sb-model').textContent = model;
+  const ollamaOk = d.ollama === 'running';
+  const ollamaEl = document.getElementById('sb-ollama');
+  ollamaEl.className = `model-st ${ollamaOk ? 'ok' : 'err'}`;
+  ollamaEl.innerHTML = `<div class="pulse-dot"></div> ${ollamaOk ? 'Running' : 'Offline'}`;
+
+  setVal('sys-ollama', ollamaOk ? 'Running' : 'Offline', ollamaOk ? 'ok' : 'err');
+  setVal('sys-hm', d.hotmail === 'ok' ? 'Authenticated' : 'Error', d.hotmail === 'ok' ? 'ok' : 'err');
+  const dry = d.dry_run;
+  setVal('sys-dry', dry ? 'Enabled' : 'Disabled', dry ? 'warn' : 'ok');
+  document.getElementById('sys-poll').textContent = `${d.poll_interval}s`;
+  document.getElementById('sys-poll').className = 'sys-val neu';
+  document.getElementById('dry-tog').classList.toggle('on', dry);
+  document.getElementById('poll-inp').value = d.poll_interval || 30;
+}
+
+function setVal(id, text, cls) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.textContent = text;
+  el.className = `sys-val ${cls}`;
+}
+
+// Animate numbers
+const _prev = {};
+function animNum(id, target) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  const from = _prev[id] || 0;
+  if (from === target) { el.textContent = target; return; }
+  _prev[id] = target;
+  let cur = from;
+  const step = Math.max(1, Math.ceil(Math.abs(target - from) / 25));
+  const t = setInterval(() => {
+    cur = cur < target ? Math.min(cur+step, target) : Math.max(cur-step, target);
+    el.textContent = cur;
+    if (cur === target) clearInterval(t);
+  }, 28);
+}
+
+// ── EMAILS ────────────────────────────────────────────────────────────────────
+function avatarBg(str) {
+  const palette = ['#2a6ae8','#e8622a','#1a8a5a','#7a1a8a','#8a7a1a','#1a7a8a','#8a2a5a'];
+  let h = 5381;
+  for (let c of str) h = ((h << 5) + h) ^ c.charCodeAt(0);
+  return palette[Math.abs(h) % palette.length];
+}
+
+function fmtT(iso) {
+  if (!iso) return '—';
+  const d = new Date(iso);
+  if (isNaN(d)) return iso;
+  return d.toDateString() === new Date().toDateString()
+    ? d.toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'})
+    : d.toLocaleDateString([], {month:'short', day:'numeric'});
+}
+
+function emailRow(e) {
+  const bg  = avatarBg(e.from || '');
+  const ltr = (e.name || e.from || '?')[0].toUpperCase();
+  const label = {replied:'Replied',draft:'Draft',skipped:'Skipped',read:'Read',unread:'New'}[e.status] || 'Unknown';
+  return `<div class="email-row" onclick='openEmail(${JSON.stringify(e).replace(/'/g,"&#39;")})'>
+    <div class="email-av" style="background:${bg}">${ltr}</div>
+    <div class="email-info">
+      <div class="email-from">${e.name || e.from || '—'}</div>
+      <div class="email-subj">${e.subject || '(no subject)'}</div>
+    </div>
+    <div class="email-meta">
+      <div class="email-time">${fmtT(e.recorded_at)}</div>
+      <div class="tag ${e.status || 'read'}">${label}</div>
+    </div>
+  </div>`;
+}
+
+async function loadDashboard() {
+  const emails = await api('/emails?limit=8');
+  if (!emails) return;
+  const pending = emails.filter(e => ['unread','draft'].includes(e.status)).length;
+  document.getElementById('unread-chip').textContent = pending;
+  const el = document.getElementById('dash-emails');
+  el.innerHTML = emails.length
+    ? emails.map(emailRow).join('')
+    : '<div class="empty"><div class="empty-ico">📭</div><div class="empty-txt">No emails yet</div></div>';
+}
+
+async function loadEmails() {
+  const emails = await api('/emails?limit=50');
+  if (!emails) return;
+  const el = document.getElementById('all-emails');
+  el.innerHTML = emails.length
+    ? emails.map(emailRow).join('')
+    : '<div class="empty"><div class="empty-ico">📭</div><div class="empty-txt">No emails processed yet</div></div>';
+  const senders = new Set(emails.map(e => e.from).filter(Boolean)).size;
+  animNum('id-sndr', senders);
+}
+
+// ── MODAL ─────────────────────────────────────────────────────────────────────
+async function openEmail(e) {
+  _curEmail = e;
+  document.getElementById('m-subj').textContent = e.subject || '(no subject)';
+  document.getElementById('m-from').textContent = e.name ? `${e.name} <${e.from}>` : e.from;
+  document.getElementById('m-time').textContent = e.recorded_at ? new Date(e.recorded_at).toLocaleString() : '—';
+  document.getElementById('m-body').textContent = e.body || '—';
+  document.getElementById('m-reply').value = e.reply || '';
+  document.getElementById('modal').classList.add('open');
+
+  if (!e.reply) {
+    document.getElementById('m-reply').placeholder = 'Generating reply…';
+    const res = await api('/generate_reply', {
+      method:'POST',
+      body: JSON.stringify({from:e.from, subject:e.subject, body:e.body}),
+    });
+    if (res?.reply) typewriter(document.getElementById('m-reply'), res.reply);
+    else document.getElementById('m-reply').placeholder = 'Could not generate reply — check Ollama.';
+  }
+}
+
+function closeModal() {
+  document.getElementById('modal').classList.remove('open');
+  _curEmail = null;
+  _curNotif = null;
+  _curConvo = null;
+}
+
+document.getElementById('modal').addEventListener('click', e => {
+  if (e.target === e.currentTarget) closeModal();
+});
+
+function typewriter(el, text) {
+  el.value = ''; let i = 0;
+  const t = setInterval(() => {
+    el.value += text[i++];
+    el.scrollTop = el.scrollHeight;
+    if (i >= text.length) clearInterval(t);
+  }, 10);
+}
+
+async function sendReply() {
+  const reply = document.getElementById('m-reply').value.trim();
+  if (!reply) { toast('⚠ Reply is empty'); return; }
+  const btn = document.getElementById('send-btn');
+  btn.textContent = 'Sending…'; btn.disabled = true;
+
+  if (_curConvo) {
+    // Canvas path
+    const res = await apiCv('/reply', {
+      method: 'POST',
+      body: JSON.stringify({ convo_id: _curConvo.convo_id, reply_text: reply }),
+    });
+    btn.textContent = 'Send Reply →'; btn.disabled = false;
+    if (res?.ok) { toast('✅ Canvas reply posted!'); closeModal(); loadConvos(); }
+    else toast('❌ Failed to post reply — check auto_reply / dry run mode.');
+  } else if (_curNotif) {
+    // GitHub path
+    if (!_curNotif.comments_url) {
+      btn.textContent = 'Send Reply →'; btn.disabled = false;
+      toast('⚠ Cannot post comment on this notification type (no comments URL).');
+      return;
+    }
+    const res = await apiGh('/reply', {
+      method: 'POST',
+      body: JSON.stringify({ comments_url: _curNotif.comments_url, reply_text: reply }),
+    });
+    btn.textContent = 'Send Reply →'; btn.disabled = false;
+    if (res?.ok) { toast('✅ GitHub comment posted!'); closeModal(); loadGitHub(); }
+    else toast('❌ Failed to post comment — check auto_reply / dry run mode.');
+  } else if (_curEmail) {
+    // Email path
+    const res = await api('/reply', {
+      method:'POST',
+      body: JSON.stringify({email_id:_curEmail.id, to:_curEmail.from, subject:_curEmail.subject, reply_text:reply}),
+    });
+    btn.textContent = 'Send Reply →'; btn.disabled = false;
+    if (res?.ok) { toast('✅ Reply sent!'); closeModal(); loadDashboard(); }
+    else toast('❌ Send failed — check dry run mode.');
+  } else {
+    btn.textContent = 'Send Reply →'; btn.disabled = false;
+  }
+}
+
+// ── MEMORY ────────────────────────────────────────────────────────────────────
+async function loadMemory() {
+  const d = await api('/memory');
+  if (!d) return;
+  const mem = d.memory || {};
+  const el = document.getElementById('mem-list');
+  const keys = Object.keys(mem);
+  el.innerHTML = keys.length ? keys.map(k => `
+    <div class="mem-item">
+      <div class="mem-key">${k}</div>
+      <div class="mem-val">${mem[k].value}</div>
+      <div class="mem-ts">${fmtT(mem[k].updated_at)}</div>
+      <button class="btn btn-danger btn-xs" onclick="delMemory('${k}')">Delete</button>
+    </div>
+  `).join('') : '<div class="empty"><div class="empty-ico">🧠</div><div class="empty-txt">No memories stored yet</div></div>';
+
+  const senders = Object.keys(d.senders || {}).length;
+  animNum('id-sndr', senders);
+}
+
+async function addMemory() {
+  const k = document.getElementById('mem-k').value.trim();
+  const v = document.getElementById('mem-v').value.trim();
+  if (!k || !v) { toast('⚠ Both key and value required'); return; }
+  await api('/memory', {method:'POST', body:JSON.stringify({key:k, value:v})});
+  document.getElementById('mem-k').value = '';
+  document.getElementById('mem-v').value = '';
+  toast('✅ Memory saved');
+  loadMemory();
+}
+
+async function delMemory(key) {
+  if (!confirm(`Delete memory "${key}"?`)) return;
+  await api('/memory/' + encodeURIComponent(key), {method:'DELETE'});
+  toast('🗑 Memory deleted');
+  loadMemory();
+}
+
+// ── CRON ──────────────────────────────────────────────────────────────────────
+const CRON_ICONS = {poll_inbox:'📬', daily_summary:'📊', memory_cleanup:'🧹'};
+
+function renderCron(jobs) {
+  if (!jobs) return;
+  document.getElementById('cron-list').innerHTML = Object.entries(jobs).map(([id, j]) => `
+    <div class="cron-item">
+      <div class="cron-icon">${CRON_ICONS[id] || '⚙'}</div>
+      <div class="cron-info">
+        <div class="cron-name">${j.name}</div>
+        <div class="cron-sch">${j.schedule}</div>
+        <div class="cron-last">Last run: ${j.last_run ? fmtT(j.last_run) : 'Never'}</div>
+      </div>
+      <div class="tog ${j.enabled?'on':''}" onclick="toggleCron('${id}',this)"></div>
+    </div>
+  `).join('');
+}
+
+async function toggleCron(id, el) {
+  const on = !el.classList.contains('on');
+  el.classList.toggle('on', on);
+  await api('/cron/'+id, {method:'PATCH', body:JSON.stringify({enabled:on})});
+  toast(on ? `✅ ${id} enabled` : `⏸ ${id} paused`);
+}
+
+// ── LOGS ─────────────────────────────────────────────────────────────────────
+async function loadLogs() {
+  const logs = await api('/logs?n=100');
+  if (!logs) return;
+  document.getElementById('log-list').innerHTML = logs.length ? logs.map(l => `
+    <div class="log-line">
+      <span class="log-ts">${l.ts?.slice(11,19)||''}</span>
+      <span class="log-lvl ${l.level}">${(l.level||'info').slice(0,4).toUpperCase()}</span>
+      <span class="log-msg">${l.message}</span>
+    </div>
+  `).join('') : '<div class="empty"><div class="empty-txt">No logs yet</div></div>';
+}
+
+// ── SETTINGS ─────────────────────────────────────────────────────────────────
+async function loadSettings() {
+  const cfg = await api('/config');
+  if (!cfg) return;
+  document.getElementById('cfg-email').textContent = cfg.email || '—';
+  document.getElementById('cfg-owner').textContent = cfg.owner || '—';
+  document.getElementById('cfg-model').textContent = cfg.model || '—';
+  document.getElementById('poll-inp').value = cfg.poll_interval || 30;
+  document.getElementById('dry-tog').classList.toggle('on', cfg.dry_run);
+}
+
+async function toggleDryRun() {
+  const t = document.getElementById('dry-tog');
+  const newVal = !t.classList.contains('on');
+  t.classList.toggle('on', newVal);
+  await api('/config', {method:'PATCH', body:JSON.stringify({dry_run:newVal})});
+  toast(newVal ? '🔒 Dry run ON — replies won\'t be sent' : '🚀 Dry run OFF — replies will be sent!', 3500);
+  pollStatus();
+}
+
+async function savePoll() {
+  const v = parseInt(document.getElementById('poll-inp').value);
+  if (isNaN(v) || v < 10) { toast('⚠ Minimum 10 seconds'); return; }
+  await api('/config', {method:'PATCH', body:JSON.stringify({poll_interval:v})});
+  toast(`✅ Poll interval set to ${v}s`);
+}
+
+// ── GITHUB ───────────────────────────────────────────────────────────────────
+async function pollGhStatus() {
+  const d = await apiGh('/status');
+  if (!d) {
+    setVal('sys-gh', 'Offline', 'err');
+    setVal('gh-auth', 'Offline', 'err');
+    return;
+  }
+  const authOk = d.github === 'ok';
+  setVal('sys-gh',  authOk ? 'Authenticated' : 'Error', authOk ? 'ok' : 'err');
+  setVal('gh-auth', authOk ? 'Authenticated' : 'Error', authOk ? 'ok' : 'err');
+  setVal('gh-auto', d.auto_reply ? 'Enabled' : 'Disabled', d.auto_reply ? 'ok' : 'warn');
+  setVal('gh-dry',  d.dry_run    ? 'Enabled' : 'Disabled', d.dry_run    ? 'warn' : 'ok');
+  const ghPoll = document.getElementById('gh-poll');
+  if (ghPoll) { ghPoll.textContent = `${d.poll_interval}s`; ghPoll.className = 'sys-val neu'; }
+}
+
+function showGhTab(tab) {
+  document.getElementById('gh-pane-repos').style.display  = tab === 'repos'  ? '' : 'none';
+  document.getElementById('gh-pane-notifs').style.display = tab === 'notifs' ? '' : 'none';
+  document.getElementById('ghtb-repos').classList.toggle('active',  tab === 'repos');
+  document.getElementById('ghtb-notifs').classList.toggle('active', tab === 'notifs');
+  if (tab === 'repos')  loadRepos();
+  if (tab === 'notifs') loadNotifs();
+}
+
+// ── REPO LIST ─────────────────────────────────────────────────────────────────
+const LANG_COLORS = {
+  Python:'#3776ab', JavaScript:'#f0db4f', TypeScript:'#3178c6',
+  Java:'#b07219', Go:'#00add8', Ruby:'#701516', Rust:'#dea584',
+  'C++':'#f34b7d', C:'#555555', 'C#':'#178600', PHP:'#4f5d95',
+  Swift:'#f05138', Kotlin:'#a97bff', Shell:'#89e051',
+  HTML:'#e44b23', CSS:'#563d7c',
+};
+function langColor(lang) { return LANG_COLORS[lang] || '#9499b4'; }
+
+function repoCard(r) {
+  const priv = r.private ? '<span style="color:var(--amber);font-size:10px;margin-left:4px;">🔒</span>' : '';
+  const lang = r.language
+    ? `<span class="repo-stat"><span class="repo-lang-dot" style="background:${langColor(r.language)}"></span>${r.language}</span>`
+    : '';
+  const id = 'rc-' + r.full_name.replace(/\//g, '-');
+  return `<div class="repo-card" id="${id}" onclick="loadRepoActivity('${r.full_name}')">
+    <div class="repo-name">📦 ${r.name}${priv}</div>
+    <div class="repo-desc">${r.description || '<em style="opacity:0.5">No description</em>'}</div>
+    <div class="repo-meta">
+      ${lang}
+      <span class="repo-stat">⭐ ${r.stars}</span>
+      <span class="repo-stat">🍴 ${r.forks}</span>
+      <span class="repo-stat" style="color:${r.open_issues > 0 ? 'var(--amber)' : 'inherit'}">⚠ ${r.open_issues}</span>
+      <span class="repo-stat" style="margin-left:auto">${fmtT(r.pushed_at)}</span>
+    </div>
+  </div>`;
+}
+
+async function loadRepos() {
+  const grid = document.getElementById('gh-repos-grid');
+  if (!grid) return;
+  grid.innerHTML = '<div class="empty"><div class="empty-ico">⏳</div><div class="empty-txt">Loading repositories…</div></div>';
+  const repos = await apiGh('/repos');
+  if (!repos || repos.error) {
+    grid.innerHTML = '<div class="empty"><div class="empty-ico">🔴</div><div class="empty-txt">GitHub gateway offline — run python github_gateway.py</div></div>';
+    return;
+  }
+  grid.innerHTML = repos.length
+    ? repos.map(repoCard).join('')
+    : '<div class="empty"><div class="empty-ico">📦</div><div class="empty-txt">No repositories found</div></div>';
+}
+
+let _activeRepo = null;
+async function loadRepoActivity(fullName) {
+  const panel = document.getElementById('gh-activity-panel');
+  if (_activeRepo === fullName) {
+    _activeRepo = null;
+    panel.innerHTML = '';
+    document.querySelectorAll('.repo-card').forEach(c => c.classList.remove('active'));
+    return;
+  }
+  _activeRepo = fullName;
+  document.querySelectorAll('.repo-card').forEach(c => c.classList.remove('active'));
+  const cardEl = document.getElementById('rc-' + fullName.replace(/\//g, '-'));
+  if (cardEl) cardEl.classList.add('active');
+  panel.innerHTML = '<div class="empty" style="padding:16px"><div class="empty-ico">⏳</div><div class="empty-txt">Loading activity…</div></div>';
+  const [owner, ...rest] = fullName.split('/');
+  const data = await apiGh(`/repo/${owner}/${rest.join('/')}/activity`);
+  if (!data || data.error) {
+    panel.innerHTML = `<div class="empty"><div class="empty-ico">❌</div><div class="empty-txt">${data?.error || 'Failed to load activity'}</div></div>`;
+    return;
+  }
+  function itemHtml(i, isPR) {
+    const ico = isPR ? '⎇' : '🐛';
+    const labels = (i.labels || []).map(l => `<span class="tag">${l}</span>`).join('');
+    return `<div class="activity-item">
+      <div class="activity-item-title">${ico} #${i.number} ${i.title}</div>
+      <div class="activity-item-meta">
+        <span>👤 ${i.user}</span>
+        ${i.comments ? `<span>💬 ${i.comments}</span>` : ''}
+        ${labels}
+        <span style="margin-left:auto">${fmtT(i.updated_at)}</span>
+      </div>
+    </div>`;
+  }
+  const noItem = txt => `<div class="activity-item" style="color:var(--text3);text-align:center;padding:14px">${txt}</div>`;
+  const issueRows = (data.issues       || []).map(i => itemHtml(i, false)).join('') || noItem('No open issues ✓');
+  const prRows    = (data.pull_requests|| []).map(p => itemHtml(p, true)).join('')  || noItem('No open pull requests ✓');
+  const relRows   = (data.releases     || []).map(r =>
+    `<div class="activity-item">
+      <div class="activity-item-title">🏷 ${r.name}${r.prerelease ? ' <span class="tag" style="background:var(--amber-dim);color:var(--amber)">pre-release</span>' : ''}</div>
+      <div class="activity-item-meta"><span style="margin-left:auto">${fmtT(r.published_at)}</span></div>
+    </div>`).join('') || noItem('No releases yet');
+  panel.innerHTML = `
+    <div class="activity-panel">
+      <div class="activity-head">
+        <span>🐛 Open Issues (${(data.issues || []).length})</span>
+        <span style="color:var(--text3);font-weight:400;cursor:pointer;font-size:15px" onclick="loadRepoActivity('${fullName}')">✕</span>
+      </div>
+      <div class="activity-list">${issueRows}</div>
+    </div>
+    <div class="activity-panel">
+      <div class="activity-head">⎇ Open Pull Requests (${(data.pull_requests || []).length})</div>
+      <div class="activity-list">${prRows}</div>
+    </div>
+    <div class="activity-panel">
+      <div class="activity-head">🏷 Latest Releases (${(data.releases || []).length})</div>
+      <div class="activity-list">${relRows}</div>
+    </div>`;
+}
+
+// ── NOTIFICATIONS ─────────────────────────────────────────────────────────────
+const NOTIF_ICONS = { Issue:'🐛', PullRequest:'⎇', Release:'🏷', Commit:'◆' };
+
+function notifRow(n) {
+  const icon = NOTIF_ICONS[n.type] || '🐙';
+  const repo = n.repo || n.from || '—';
+  return `<div class="email-row" onclick='openNotif(${JSON.stringify(n).replace(/'/g,"&#39;")})'>
+    <div class="email-av" style="background:#1a1e35;font-size:18px;display:flex;align-items:center;justify-content:center;">${icon}</div>
+    <div class="email-info">
+      <div class="email-from">${repo}</div>
+      <div class="email-subj">${n.subject || '(no title)'}</div>
+    </div>
+    <div class="email-meta">
+      <div class="email-time">${fmtT(n.recorded_at)}</div>
+      <div class="tag ${n.status || 'read'}">${n.type || 'Notification'}</div>
+    </div>
+  </div>`;
+}
+
+async function loadNotifs() {
+  const el = document.getElementById('all-notifs');
+  if (!el) return;
+  const notifs = await apiGh('/notifications?limit=50');
+  if (!notifs) {
+    el.innerHTML = '<div class="empty"><div class="empty-ico">🔴</div><div class="empty-txt">GitHub gateway offline — run python github_gateway.py</div></div>';
+    return;
+  }
+  el.innerHTML = notifs.length
+    ? notifs.map(notifRow).join('')
+    : '<div class="empty"><div class="empty-ico">🐙</div><div class="empty-txt">No notifications processed yet</div></div>';
+  document.getElementById('gh-chip').textContent = notifs.length;
+}
+
+async function loadGitHub() {
+  const reposVisible = document.getElementById('gh-pane-repos')?.style.display !== 'none';
+  if (reposVisible) loadRepos();
+  else loadNotifs();
+}
+
+async function openNotif(n) {
+  _curNotif = n;
+  _curEmail = null;
+  document.getElementById('m-subj').textContent = `[${n.type || 'Notification'}] ${n.subject || '(no title)'}`;
+  document.getElementById('m-from').textContent = n.repo || '—';
+  document.getElementById('m-time').textContent = n.recorded_at ? new Date(n.recorded_at).toLocaleString() : '—';
+  document.getElementById('m-body').textContent = n.body || '(no description provided)';
+  document.getElementById('m-reply').value = n.reply || '';
+  document.getElementById('modal').classList.add('open');
+
+  if (!n.reply) {
+    if (!n.body) {
+      document.getElementById('m-reply').placeholder = 'No body text — cannot generate reply.';
+      return;
+    }
+    document.getElementById('m-reply').placeholder = 'Generating reply…';
+    const res = await apiGh('/generate_reply', {
+      method: 'POST',
+      body: JSON.stringify({ from: n.repo, subject: n.subject, body: n.body, type: n.type }),
+    });
+    if (res?.reply) typewriter(document.getElementById('m-reply'), res.reply);
+    else document.getElementById('m-reply').placeholder = 'Could not generate reply — check Ollama.';
+  }
+}
+
+// ── CANVAS ───────────────────────────────────────────────────────────────────
+const API_CV = 'http://127.0.0.1:5002/api';
+let _curConvo   = null;
+let _activeCourse = null;
+
+async function apiCv(path, opts = {}) {
+  try {
+    const r = await fetch(API_CV + path, { headers:{'Content-Type':'application/json'}, ...opts });
+    return r.json();
+  } catch { return null; }
+}
+
+async function pollCvStatus() {
+  const d = await apiCv('/status');
+  if (!d) {
+    setVal('sys-cv',  'Offline', 'err');
+    setVal('cv-auth', 'Offline', 'err');
+    return;
+  }
+  const authOk = d.canvas === 'ok';
+  setVal('sys-cv',  authOk ? 'Authenticated' : 'Error', authOk ? 'ok' : 'err');
+  setVal('cv-auth', authOk ? 'Authenticated' : 'Error', authOk ? 'ok' : 'err');
+  setVal('cv-auto', d.auto_reply ? 'Enabled' : 'Disabled', d.auto_reply ? 'ok' : 'warn');
+  setVal('cv-dry',  d.dry_run    ? 'Enabled' : 'Disabled', d.dry_run    ? 'warn' : 'ok');
+  const pollEl = document.getElementById('cv-poll');
+  if (pollEl) { pollEl.textContent = `${d.poll_interval}s`; pollEl.className = 'sys-val neu'; }
+  const urlEl = document.getElementById('cv-url');
+  if (urlEl) { urlEl.textContent = d.base_url || '—'; urlEl.className = 'sys-val neu'; }
+}
+
+function showCvTab(tab) {
+  document.getElementById('cv-pane-courses').style.display = tab === 'courses' ? '' : 'none';
+  document.getElementById('cv-pane-convos').style.display  = tab === 'convos'  ? '' : 'none';
+  document.getElementById('cvtb-courses').classList.toggle('active', tab === 'courses');
+  document.getElementById('cvtb-convos').classList.toggle('active',  tab === 'convos');
+  if (tab === 'courses') loadCourses();
+  if (tab === 'convos')  loadConvos();
+}
+
+// ── COURSE CARDS ─────────────────────────────────────────────────────────────
+const ENROLL_LABELS = {
+  StudentEnrollment: { label:'Student', color:'var(--blue)' },
+  TeacherEnrollment: { label:'Teacher', color:'var(--teal)' },
+  TaEnrollment:      { label:'TA',      color:'var(--amber)' },
+  DesignerEnrollment:{ label:'Designer',color:'var(--text3)' },
+};
+
+function courseCard(c) {
+  const enroll = ENROLL_LABELS[c.enrollment_type] || { label: c.enrollment_type || 'Enrolled', color:'var(--text3)' };
+  const endDate = c.end_at ? `<span class="repo-stat">ends ${fmtT(c.end_at)}</span>` : '';
+  const id = 'cc-' + c.id;
+  return `<div class="repo-card" id="${id}" onclick="loadCourseActivity(${c.id}, '${c.name.replace(/'/g,"&#39;")}')">
+    <div class="repo-name">📚 ${c.name}</div>
+    <div class="repo-desc" style="color:var(--text3);font-family:var(--mono);font-size:11px;">${c.course_code || ''}</div>
+    <div class="repo-meta">
+      <span class="repo-stat" style="color:${enroll.color};font-weight:600;">${enroll.label}</span>
+      ${endDate}
+    </div>
+  </div>`;
+}
+
+async function loadCourses() {
+  const grid = document.getElementById('cv-courses-grid');
+  if (!grid) return;
+  grid.innerHTML = '<div class="empty"><div class="empty-ico">⏳</div><div class="empty-txt">Loading courses…</div></div>';
+  const courses = await apiCv('/courses');
+  if (!courses || courses.error) {
+    grid.innerHTML = '<div class="empty"><div class="empty-ico">🔴</div><div class="empty-txt">Canvas gateway offline — run python canvas_gateway.py</div></div>';
+    return;
+  }
+  grid.innerHTML = courses.length
+    ? courses.map(courseCard).join('')
+    : '<div class="empty"><div class="empty-ico">📚</div><div class="empty-txt">No active courses found</div></div>';
+}
+
+async function loadCourseActivity(courseId, courseName) {
+  const panel = document.getElementById('cv-activity-panel');
+  if (_activeCourse === courseId) {
+    _activeCourse = null;
+    panel.innerHTML = '';
+    document.querySelectorAll('.repo-card').forEach(c => c.classList.remove('active'));
+    return;
+  }
+  _activeCourse = courseId;
+  document.querySelectorAll('.repo-card').forEach(c => c.classList.remove('active'));
+  const cardEl = document.getElementById('cc-' + courseId);
+  if (cardEl) cardEl.classList.add('active');
+  panel.innerHTML = '<div class="empty" style="padding:16px"><div class="empty-ico">⏳</div><div class="empty-txt">Loading course activity…</div></div>';
+
+  const data = await apiCv(`/course/${courseId}/activity`);
+  if (!data || data.error) {
+    panel.innerHTML = `<div class="empty"><div class="empty-ico">❌</div><div class="empty-txt">${data?.error || 'Failed to load activity'}</div></div>`;
+    return;
+  }
+
+  const noItem = txt => `<div class="activity-item" style="color:var(--text3);text-align:center;padding:14px">${txt}</div>`;
+
+  const annRows = (data.announcements || []).map(a =>
+    `<div class="activity-item">
+      <div class="activity-item-title">📢 ${a.title}</div>
+      <div class="activity-item-meta">
+        ${a.author ? `<span>👤 ${a.author}</span>` : ''}
+        ${a.message ? `<span style="color:var(--text2)">${a.message}</span>` : ''}
+        <span style="margin-left:auto">${fmtT(a.posted_at)}</span>
+      </div>
+    </div>`).join('') || noItem('No announcements');
+
+  const discRows = (data.discussions || []).map(d =>
+    `<div class="activity-item">
+      <div class="activity-item-title">💬 ${d.title}</div>
+      <div class="activity-item-meta">
+        ${d.replies_count ? `<span>💬 ${d.replies_count} replies</span>` : ''}
+        ${d.message ? `<span style="color:var(--text2)">${d.message}</span>` : ''}
+        <span style="margin-left:auto">${fmtT(d.posted_at)}</span>
+      </div>
+    </div>`).join('') || noItem('No discussions');
+
+  const asnRows = (data.assignments || []).map(a => {
+    const pts = a.points_possible != null ? `${a.points_possible} pts` : '';
+    const types = (a.submission_types || []).join(', ');
+    return `<div class="activity-item">
+      <div class="activity-item-title">📝 ${a.name}</div>
+      <div class="activity-item-meta">
+        ${pts ? `<span>${pts}</span>` : ''}
+        ${types ? `<span>${types}</span>` : ''}
+        <span style="margin-left:auto;color:${a.due_at ? 'var(--amber)' : 'inherit'}">due ${fmtT(a.due_at) || '—'}</span>
+      </div>
+    </div>`;
+  }).join('') || noItem('No upcoming assignments ✓');
+
+  panel.innerHTML = `
+    <div class="activity-panel">
+      <div class="activity-head">
+        <span>📢 Announcements (${(data.announcements || []).length})</span>
+        <span style="color:var(--text3);font-weight:400;cursor:pointer;font-size:15px" onclick="loadCourseActivity(${courseId},'')">✕</span>
+      </div>
+      <div class="activity-list">${annRows}</div>
+    </div>
+    <div class="activity-panel">
+      <div class="activity-head">💬 Discussions (${(data.discussions || []).length})</div>
+      <div class="activity-list">${discRows}</div>
+    </div>
+    <div class="activity-panel">
+      <div class="activity-head">📝 Upcoming Assignments (${(data.assignments || []).length})</div>
+      <div class="activity-list">${asnRows}</div>
+    </div>`;
+}
+
+// ── CONVERSATIONS ─────────────────────────────────────────────────────────────
+function convoRow(c) {
+  const bg  = avatarBg(c.from || '');
+  const ltr = (c.name || c.from || '?')[0].toUpperCase();
+  return `<div class="email-row" onclick='openConvo(${JSON.stringify(c).replace(/'/g,"&#39;")})'>
+    <div class="email-av" style="background:${bg}">${ltr}</div>
+    <div class="email-info">
+      <div class="email-from">${c.name || c.from || '—'}${c.course ? ` <span style="color:var(--text3);font-weight:400">· ${c.course}</span>` : ''}</div>
+      <div class="email-subj">${c.subject || '(no subject)'}</div>
+    </div>
+    <div class="email-meta">
+      <div class="email-time">${fmtT(c.recorded_at)}</div>
+      <div class="tag ${c.status || 'read'}">Canvas</div>
+    </div>
+  </div>`;
+}
+
+async function loadConvos() {
+  const el = document.getElementById('cv-all-convos');
+  if (!el) return;
+  const convos = await apiCv('/conversations?limit=50');
+  if (!convos) {
+    el.innerHTML = '<div class="empty"><div class="empty-ico">🔴</div><div class="empty-txt">Canvas gateway offline — run python canvas_gateway.py</div></div>';
+    return;
+  }
+  el.innerHTML = convos.length
+    ? convos.map(convoRow).join('')
+    : '<div class="empty"><div class="empty-ico">💬</div><div class="empty-txt">No conversations processed yet</div></div>';
+  document.getElementById('cv-chip').textContent = convos.length;
+}
+
+async function loadCanvas() {
+  const coursesVisible = document.getElementById('cv-pane-courses')?.style.display !== 'none';
+  if (coursesVisible) loadCourses();
+  else loadConvos();
+}
+
+async function openConvo(c) {
+  _curConvo  = c;
+  _curEmail  = null;
+  _curNotif  = null;
+  document.getElementById('m-subj').textContent = c.subject || '(no subject)';
+  document.getElementById('m-from').textContent = c.course ? `${c.name || c.from} · ${c.course}` : (c.name || c.from || '—');
+  document.getElementById('m-time').textContent = c.received ? new Date(c.received).toLocaleString() : '—';
+  document.getElementById('m-body').textContent = c.body || '(no message body)';
+  document.getElementById('m-reply').value = c.reply || '';
+  document.getElementById('modal').classList.add('open');
+
+  if (!c.reply) {
+    if (!c.body) {
+      document.getElementById('m-reply').placeholder = 'No message body — cannot generate reply.';
+      return;
+    }
+    document.getElementById('m-reply').placeholder = 'Generating reply…';
+    const res = await apiCv('/generate_reply', {
+      method: 'POST',
+      body: JSON.stringify({ from: c.from, subject: c.subject, body: c.body, course: c.course }),
+    });
+    if (res?.reply) typewriter(document.getElementById('m-reply'), res.reply);
+    else document.getElementById('m-reply').placeholder = 'Could not generate reply — check Ollama.';
+  }
+}
+
+// ── BOOT ─────────────────────────────────────────────────────────────────────
+async function boot() {
+  await pollStatus();
+  await pollGhStatus();
+  await pollCvStatus();
+  await loadDashboard();
+}
+boot();
+setInterval(pollStatus,    10_000);
+setInterval(pollGhStatus,  15_000);
+setInterval(pollCvStatus,  15_000);
+setInterval(loadDashboard, 30_000);
+</script>
+</body>
+</html>

@@ -1,0 +1,18 @@
+2026-02-24 12:18:42,044 [INFO] ============================================================
+2026-02-24 12:18:42,045 [INFO] 📚  LocalClaw Canvas Gateway
+2026-02-24 12:18:42,046 [INFO] Owner     : Imran
+2026-02-24 12:18:42,047 [INFO] Base URL  : 
+2026-02-24 12:18:42,047 [INFO] Model     : llama3.2:3b
+2026-02-24 12:18:42,048 [INFO] Poll      : every 60s
+2026-02-24 12:18:42,049 [INFO] DryRun    : True
+2026-02-24 12:18:42,050 [INFO] AutoReply : False
+2026-02-24 12:18:42,055 [INFO] ============================================================
+2026-02-24 12:18:42,137 [INFO] Canvas token loaded from keychain.
+2026-02-24 12:18:42,138 [ERROR] get_courses failed: Invalid URL '/api/v1/courses': No scheme supplied. Perhaps you meant https:///api/v1/courses?
+2026-02-24 12:18:42,139 [INFO] Poll #1 — 0 active course(s)
+2026-02-24 12:19:42,141 [ERROR] get_courses failed: Invalid URL '/api/v1/courses': No scheme supplied. Perhaps you meant https:///api/v1/courses?
+2026-02-24 12:19:42,144 [INFO] Poll #2 — 0 active course(s)
+2026-02-24 12:20:42,145 [ERROR] get_courses failed: Invalid URL '/api/v1/courses': No scheme supplied. Perhaps you meant https:///api/v1/courses?
+2026-02-24 12:20:42,145 [INFO] Poll #3 — 0 active course(s)
+2026-02-24 12:21:42,148 [ERROR] get_courses failed: Invalid URL '/api/v1/courses': No scheme supplied. Perhaps you meant https:///api/v1/courses?
+2026-02-24 12:21:42,150 [INFO] Poll #4 — 0 active course(s)

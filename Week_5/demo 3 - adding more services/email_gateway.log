@@ -1,0 +1,25 @@
+2026-02-24 11:45:35,685 [INFO] ============================================================
+2026-02-24 11:45:35,686 [INFO] ✉️   LocalClaw Email Gateway
+2026-02-24 11:45:35,689 [INFO] Owner  : Imran
+2026-02-24 11:45:35,690 [INFO] Model  : llama3.2:3b
+2026-02-24 11:45:35,690 [INFO] Email  : imranraad@live.co.uk
+2026-02-24 11:45:35,691 [INFO] Poll   : every 30s
+2026-02-24 11:45:35,694 [INFO] DryRun : True
+2026-02-24 11:45:35,695 [INFO] ============================================================
+2026-02-24 11:45:35,699 [INFO] Ollama : running
+2026-02-24 11:46:13,873 [INFO] Hotmail token acquired and cached.
+2026-02-24 12:18:42,043 [INFO] ============================================================
+2026-02-24 12:18:42,045 [INFO] ✉️   LocalClaw Email Gateway
+2026-02-24 12:18:42,046 [INFO] Owner  : Imran
+2026-02-24 12:18:42,046 [INFO] Model  : llama3.2:3b
+2026-02-24 12:18:42,047 [INFO] Email  : 
+2026-02-24 12:18:42,048 [INFO] Poll   : every 30s
+2026-02-24 12:18:42,048 [INFO] DryRun : True
+2026-02-24 12:18:42,049 [INFO] ============================================================
+2026-02-24 12:18:42,058 [INFO] Ollama : running
+2026-02-24 12:19:30,840 [INFO] Hotmail token acquired and cached.
+2026-02-24 12:19:31,245 [INFO] Poll #1 — no new emails
+2026-02-24 12:20:02,637 [INFO] Poll #2 — 1 new email(s)
+2026-02-24 12:20:02,638 [INFO] New email | From: account-security-noreply@accountprotection.microsoft.com | Subject: New sign-in detected for your Microsoft account
+2026-02-24 12:21:36,012 [INFO] [DRY RUN] Reply draft generated (850 chars).
+2026-02-24 12:22:06,930 [INFO] Poll #3 — no new emails

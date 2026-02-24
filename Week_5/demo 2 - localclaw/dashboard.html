@@ -1,0 +1,1352 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>LocalClaw — Dashboard</title>
+<link href="https://fonts.googleapis.com/css2?family=Sora:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg:         #0f1117;
+  --bg1:        #151820;
+  --bg2:        #1c2030;
+  --bg3:        #242840;
+  --bg4:        #2d3150;
+  --teal:       #38d9b0;
+  --teal-dim:   rgba(56,217,176,0.12);
+  --teal-glow:  rgba(56,217,176,0.25);
+  --blue:       #5b8df8;
+  --blue-dim:   rgba(91,141,248,0.12);
+  --amber:      #f0a050;
+  --amber-dim:  rgba(240,160,80,0.12);
+  --rose:       #f06080;
+  --rose-dim:   rgba(240,96,128,0.12);
+  --green:      #4cd87a;
+  --green-dim:  rgba(76,216,122,0.12);
+  --text:       #e8eaf2;
+  --text2:      #9499b4;
+  --text3:      #565c7e;
+  --border:     rgba(255,255,255,0.06);
+  --border2:    rgba(255,255,255,0.1);
+  --shadow:     0 4px 24px rgba(0,0,0,0.35);
+  --shadow-lg:  0 12px 48px rgba(0,0,0,0.5);
+  --radius:     14px;
+  --radius-sm:  9px;
+  --font:       'Sora', sans-serif;
+  --mono:       'JetBrains Mono', monospace;
+}
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+html { scroll-behavior: smooth; }
+
+body {
+  font-family: var(--font);
+  background: var(--bg);
+  color: var(--text);
+  font-size: 14px;
+  line-height: 1.6;
+  min-height: 100vh;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Subtle background texture */
+body::before {
+  content: '';
+  position: fixed; inset: 0;
+  background:
+    radial-gradient(ellipse 80% 50% at 20% 0%, rgba(56,217,176,0.04) 0%, transparent 60%),
+    radial-gradient(ellipse 60% 40% at 80% 100%, rgba(91,141,248,0.05) 0%, transparent 60%);
+  pointer-events: none; z-index: 0;
+}
+
+/* ── SIDEBAR ── */
+.sidebar {
+  position: fixed; left: 0; top: 0; bottom: 0;
+  width: 256px;
+  background: var(--bg1);
+  border-right: 1px solid var(--border);
+  display: flex; flex-direction: column;
+  z-index: 100;
+  backdrop-filter: blur(20px);
+}
+
+.logo-area {
+  padding: 28px 22px 24px;
+  border-bottom: 1px solid var(--border);
+}
+
+.logo-row {
+  display: flex; align-items: center; gap: 12px;
+}
+
+.logo-gem {
+  position: relative;
+  width: 42px; height: 42px; border-radius: 12px;
+  background: linear-gradient(135deg, #1a3a35, #0d2020);
+  border: 1px solid rgba(56,217,176,0.3);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 20px;
+  box-shadow: 0 0 20px rgba(56,217,176,0.15), inset 0 1px 0 rgba(255,255,255,0.05);
+  flex-shrink: 0;
+}
+
+.logo-gem::after {
+  content: '';
+  position: absolute; top: -1px; left: 50%; transform: translateX(-50%);
+  width: 20px; height: 1px;
+  background: linear-gradient(90deg, transparent, var(--teal), transparent);
+  border-radius: 2px;
+}
+
+.logo-name {
+  font-size: 18px; font-weight: 700;
+  color: var(--text);
+  letter-spacing: -0.4px;
+}
+
+.logo-sub {
+  font-size: 11px; color: var(--text3);
+  margin-top: 1px; letter-spacing: 0.2px;
+}
+
+/* Nav */
+.nav { padding: 16px 12px; flex: 1; overflow-y: auto; }
+
+.nav-section {
+  font-size: 10px; font-weight: 600;
+  color: var(--text3); letter-spacing: 1px;
+  text-transform: uppercase;
+  padding: 10px 10px 6px;
+}
+
+.nav-item {
+  display: flex; align-items: center; gap: 10px;
+  padding: 10px 12px; border-radius: var(--radius-sm);
+  cursor: pointer; color: var(--text2);
+  font-size: 13.5px; font-weight: 500;
+  transition: all 0.18s; margin-bottom: 2px;
+  position: relative; user-select: none;
+}
+
+.nav-item:hover { background: var(--bg2); color: var(--text); }
+
+.nav-item.active {
+  background: var(--teal-dim);
+  color: var(--teal);
+}
+
+.nav-item.active::before {
+  content: '';
+  position: absolute; left: 0; top: 20%; bottom: 20%;
+  width: 3px; border-radius: 0 2px 2px 0;
+  background: var(--teal);
+  box-shadow: 0 0 8px var(--teal-glow);
+}
+
+.nav-icon { font-size: 16px; width: 22px; text-align: center; flex-shrink: 0; }
+
+.nav-chip {
+  margin-left: auto;
+  background: var(--teal);
+  color: var(--bg);
+  font-size: 10px; font-weight: 700;
+  padding: 2px 7px; border-radius: 20px;
+  min-width: 20px; text-align: center;
+}
+
+/* Sidebar footer */
+.sidebar-foot {
+  padding: 16px 14px;
+  border-top: 1px solid var(--border);
+}
+
+.model-pill {
+  background: var(--bg2);
+  border: 1px solid var(--border2);
+  border-radius: var(--radius-sm);
+  padding: 12px 14px;
+}
+
+.model-lbl { font-size: 10px; color: var(--text3); font-weight: 600; letter-spacing: 0.8px; text-transform: uppercase; margin-bottom: 5px; }
+.model-nm  { font-family: var(--mono); font-size: 13px; color: var(--text); font-weight: 500; }
+.model-st  { display: flex; align-items: center; gap: 5px; margin-top: 6px; font-size: 11px; font-weight: 500; }
+.model-st.ok  { color: var(--teal); }
+.model-st.err { color: var(--rose); }
+
+.pulse-dot {
+  width: 6px; height: 6px; border-radius: 50%;
+  background: currentColor;
+  animation: pdot 2s ease-in-out infinite;
+}
+@keyframes pdot { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:0.3;transform:scale(0.7)} }
+
+/* ── MAIN ── */
+.main {
+  margin-left: 256px;
+  min-height: 100vh;
+  position: relative; z-index: 1;
+}
+
+/* ── TOPBAR ── */
+.topbar {
+  background: rgba(15,17,23,0.85);
+  backdrop-filter: blur(20px);
+  border-bottom: 1px solid var(--border);
+  padding: 0 32px;
+  height: 64px;
+  display: flex; align-items: center; justify-content: space-between;
+  position: sticky; top: 0; z-index: 50;
+}
+
+.topbar-left { display: flex; align-items: center; gap: 16px; }
+
+.page-title {
+  font-size: 18px; font-weight: 600;
+  color: var(--text); letter-spacing: -0.3px;
+}
+
+.topbar-right { display: flex; align-items: center; gap: 12px; }
+
+.gw-badge {
+  display: flex; align-items: center; gap: 6px;
+  padding: 6px 14px;
+  border-radius: 20px; border: 1px solid;
+  font-size: 12px; font-weight: 600;
+  transition: all 0.3s;
+}
+.gw-badge.online  { background: var(--green-dim); border-color: rgba(76,216,122,0.25); color: var(--green); }
+.gw-badge.offline { background: var(--rose-dim);  border-color: rgba(240,96,128,0.25); color: var(--rose); }
+
+.clock-box {
+  font-family: var(--mono);
+  font-size: 13px; font-weight: 500;
+  color: var(--text2);
+  background: var(--bg1);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 7px 14px;
+  letter-spacing: 0.5px;
+}
+
+/* ── CONTENT ── */
+.content { padding: 28px 32px; }
+
+.view { display: none; animation: fadeup 0.22s ease; }
+.view.active { display: block; }
+
+@keyframes fadeup {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: none; }
+}
+
+/* ── STAT CARDS ── */
+.stats-row {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 16px;
+  margin-bottom: 28px;
+}
+
+.stat-card {
+  background: var(--bg1);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 22px 24px;
+  position: relative; overflow: hidden;
+  transition: border-color 0.2s, transform 0.2s;
+  cursor: default;
+}
+
+.stat-card:hover {
+  border-color: var(--border2);
+  transform: translateY(-2px);
+}
+
+.stat-card::before {
+  content: '';
+  position: absolute; top: 0; left: 0; right: 0; height: 1px;
+  background: linear-gradient(90deg, transparent 0%, var(--accent-line, var(--teal)) 50%, transparent 100%);
+  opacity: 0.5;
+}
+
+.stat-card.c-teal  { --accent-line: var(--teal); }
+.stat-card.c-blue  { --accent-line: var(--blue); }
+.stat-card.c-amber { --accent-line: var(--amber); }
+.stat-card.c-green { --accent-line: var(--green); }
+
+.stat-head {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-bottom: 14px;
+}
+
+.stat-icon {
+  width: 36px; height: 36px; border-radius: 10px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 17px;
+}
+
+.stat-icon.teal  { background: var(--teal-dim); }
+.stat-icon.blue  { background: var(--blue-dim); }
+.stat-icon.amber { background: var(--amber-dim); }
+.stat-icon.green { background: var(--green-dim); }
+
+.stat-badge {
+  font-size: 11px; font-weight: 600;
+  padding: 3px 9px; border-radius: 20px;
+}
+.stat-badge.up   { background: var(--green-dim); color: var(--green); }
+.stat-badge.warn { background: var(--amber-dim); color: var(--amber); }
+.stat-badge.neu  { background: var(--bg3); color: var(--text3); }
+
+.stat-num {
+  font-size: 34px; font-weight: 700;
+  color: var(--text); line-height: 1;
+  letter-spacing: -1px;
+  margin-bottom: 5px;
+}
+
+.stat-lbl { font-size: 12.5px; color: var(--text2); font-weight: 400; }
+
+/* ── GRID ── */
+.dash-grid {
+  display: grid;
+  grid-template-columns: 1fr 320px;
+  gap: 20px;
+}
+
+/* ── PANEL ── */
+.panel {
+  background: var(--bg1);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+
+.panel-head {
+  padding: 18px 22px 16px;
+  border-bottom: 1px solid var(--border);
+  display: flex; align-items: center; justify-content: space-between;
+}
+
+.panel-title {
+  font-size: 14px; font-weight: 600;
+  color: var(--text); letter-spacing: -0.2px;
+}
+
+.panel-body { padding: 6px 22px 18px; }
+
+.panel-action {
+  font-size: 12px; color: var(--teal); font-weight: 500;
+  cursor: pointer; padding: 4px 10px; border-radius: 6px;
+  background: none; border: none; transition: background 0.15s;
+}
+.panel-action:hover { background: var(--teal-dim); }
+
+/* ── EMAIL ROWS ── */
+.email-row {
+  display: flex; align-items: center; gap: 13px;
+  padding: 13px 0;
+  border-bottom: 1px solid var(--border);
+  cursor: pointer;
+  border-radius: 0;
+  transition: all 0.15s;
+  position: relative;
+}
+
+.email-row:last-child { border-bottom: none; }
+
+.email-row:hover {
+  background: var(--bg2);
+  padding-left: 10px; padding-right: 10px;
+  margin: 0 -10px;
+  border-radius: var(--radius-sm);
+}
+
+.email-av {
+  width: 38px; height: 38px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 14px; font-weight: 700; color: white;
+  flex-shrink: 0; letter-spacing: -0.5px;
+}
+
+.email-info { flex: 1; min-width: 0; }
+
+.email-from {
+  font-size: 13.5px; font-weight: 600; color: var(--text);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+
+.email-subj {
+  font-size: 12.5px; color: var(--text2);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  margin-top: 2px;
+}
+
+.email-meta {
+  display: flex; flex-direction: column; align-items: flex-end; gap: 5px;
+  flex-shrink: 0;
+}
+
+.email-time { font-size: 11px; color: var(--text3); font-family: var(--mono); }
+
+.tag {
+  font-size: 10px; font-weight: 600;
+  padding: 2px 8px; border-radius: 20px;
+}
+.tag.new     { background: var(--teal-dim);  color: var(--teal); }
+.tag.replied { background: var(--green-dim); color: var(--green); }
+.tag.draft   { background: var(--amber-dim); color: var(--amber); }
+.tag.skipped { background: var(--bg3);       color: var(--text3); }
+.tag.read    { background: var(--bg3);       color: var(--text3); }
+
+/* ── IDENTITY CARD ── */
+.identity-card {
+  background: linear-gradient(160deg, var(--bg2) 0%, var(--bg1) 100%);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 20px;
+  margin-bottom: 16px;
+  position: relative; overflow: hidden;
+}
+
+.identity-card::after {
+  content: '';
+  position: absolute; top: -40px; right: -40px;
+  width: 140px; height: 140px; border-radius: 50%;
+  background: radial-gradient(circle, var(--teal-dim), transparent 70%);
+  pointer-events: none;
+}
+
+.id-top { display: flex; align-items: center; gap: 14px; margin-bottom: 16px; }
+
+.id-avatar {
+  width: 50px; height: 50px; border-radius: 14px;
+  background: linear-gradient(135deg, #1a3a35, #0d2020);
+  border: 1px solid rgba(56,217,176,0.3);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 24px;
+  box-shadow: 0 4px 16px rgba(56,217,176,0.1);
+}
+
+.id-name { font-size: 17px; font-weight: 700; color: var(--text); letter-spacing: -0.3px; }
+.id-role { font-size: 12px; color: var(--text3); margin-top: 2px; }
+.id-mood { display: flex; align-items: center; gap: 5px; margin-top: 6px; font-size: 11px; color: var(--teal); }
+
+.id-stats { display: grid; grid-template-columns: repeat(3,1fr); gap: 1px; margin-top: 4px; background: var(--border); border-radius: 8px; overflow: hidden; }
+.idstat { background: var(--bg2); padding: 10px; text-align: center; }
+.idstat-n { font-size: 19px; font-weight: 700; color: var(--text); }
+.idstat-l { font-size: 10px; color: var(--text3); margin-top: 2px; }
+
+/* ── SYS STATUS ── */
+.sys-row {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 10px 0; border-bottom: 1px solid var(--border);
+}
+.sys-row:last-child { border-bottom: none; }
+.sys-lbl { font-size: 13px; color: var(--text2); }
+.sys-val { font-size: 11.5px; font-weight: 600; padding: 3px 10px; border-radius: 20px; }
+.sys-val.ok   { background: var(--green-dim); color: var(--green); }
+.sys-val.err  { background: var(--rose-dim);  color: var(--rose); }
+.sys-val.warn { background: var(--amber-dim); color: var(--amber); }
+.sys-val.neu  { background: var(--bg3);       color: var(--text3); }
+
+/* ── MEMORY ── */
+.mem-add-row { display: flex; gap: 10px; margin-bottom: 20px; }
+
+.inp {
+  flex: 1; padding: 10px 14px;
+  background: var(--bg2); border: 1px solid var(--border2);
+  border-radius: var(--radius-sm);
+  font-family: var(--font); font-size: 13px; color: var(--text);
+  transition: border-color 0.15s, background 0.15s;
+}
+.inp::placeholder { color: var(--text3); }
+.inp:focus { outline: none; border-color: var(--teal); background: var(--bg3); }
+
+.mem-item {
+  display: flex; align-items: center; gap: 14px;
+  padding: 13px 16px; margin-bottom: 8px;
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  transition: border-color 0.15s;
+}
+.mem-item:hover { border-color: var(--border2); }
+.mem-key { font-family: var(--mono); font-size: 11.5px; color: var(--teal); min-width: 130px; font-weight: 500; }
+.mem-val { flex: 1; font-size: 13px; color: var(--text2); }
+.mem-ts  { font-size: 11px; color: var(--text3); flex-shrink: 0; font-family: var(--mono); }
+
+/* ── CRON ── */
+.cron-item {
+  display: flex; align-items: center; gap: 14px;
+  padding: 15px 0; border-bottom: 1px solid var(--border);
+}
+.cron-item:last-child { border-bottom: none; }
+.cron-icon { font-size: 22px; width: 40px; text-align: center; flex-shrink: 0; }
+.cron-info { flex: 1; }
+.cron-name { font-size: 13.5px; font-weight: 600; color: var(--text); }
+.cron-sch  { font-family: var(--mono); font-size: 11px; color: var(--text3); margin-top: 2px; }
+.cron-last { font-size: 11px; color: var(--text3); margin-top: 2px; }
+
+/* Toggle */
+.tog {
+  width: 42px; height: 24px; border-radius: 12px;
+  background: var(--bg3); border: 1px solid var(--border2);
+  position: relative; cursor: pointer; flex-shrink: 0;
+  transition: background 0.25s, border-color 0.25s;
+}
+.tog.on { background: var(--teal); border-color: var(--teal); }
+.tog::after {
+  content: '';
+  position: absolute; top: 3px; left: 3px;
+  width: 16px; height: 16px; border-radius: 50%;
+  background: var(--text2);
+  box-shadow: 0 1px 4px rgba(0,0,0,0.4);
+  transition: left 0.25s, background 0.25s;
+}
+.tog.on::after { left: 21px; background: white; }
+
+/* ── LOGS ── */
+.log-line {
+  display: flex; gap: 14px; align-items: baseline;
+  padding: 7px 0; border-bottom: 1px solid var(--border);
+  font-size: 12.5px;
+}
+.log-line:last-child { border-bottom: none; }
+.log-ts  { font-family: var(--mono); color: var(--text3); flex-shrink: 0; font-size: 11px; }
+.log-lvl { flex-shrink: 0; width: 38px; font-weight: 700; font-family: var(--mono); font-size: 10px; letter-spacing: 0.5px; }
+.log-lvl.info  { color: var(--blue); }
+.log-lvl.ok    { color: var(--teal); }
+.log-lvl.warn  { color: var(--amber); }
+.log-lvl.error { color: var(--rose); }
+.log-msg { color: var(--text2); }
+
+/* ── SETTINGS ── */
+.settings-group { margin-bottom: 32px; }
+.settings-group-title { font-size: 11px; font-weight: 600; color: var(--text3); text-transform: uppercase; letter-spacing: 1px; margin-bottom: 14px; }
+
+.setting-row {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 15px 0; border-bottom: 1px solid var(--border);
+}
+.setting-row:last-child { border-bottom: none; }
+.setting-lbl { font-size: 14px; color: var(--text); font-weight: 500; }
+.setting-sub { font-size: 12px; color: var(--text3); margin-top: 3px; }
+
+.num-inp {
+  width: 80px; padding: 8px 12px;
+  background: var(--bg2); border: 1px solid var(--border2);
+  border-radius: var(--radius-sm); font-family: var(--mono);
+  font-size: 13px; color: var(--text); text-align: center;
+}
+.num-inp:focus { outline: none; border-color: var(--teal); }
+
+/* ── BUTTONS ── */
+.btn {
+  padding: 9px 20px; border-radius: var(--radius-sm);
+  font-family: var(--font); font-size: 13px; font-weight: 600;
+  cursor: pointer; transition: all 0.18s; border: none;
+  display: inline-flex; align-items: center; gap: 6px;
+}
+.btn-teal {
+  background: var(--teal); color: var(--bg);
+  box-shadow: 0 2px 12px rgba(56,217,176,0.3);
+}
+.btn-teal:hover { filter: brightness(1.1); box-shadow: 0 4px 20px rgba(56,217,176,0.4); transform: translateY(-1px); }
+.btn-ghost {
+  background: var(--bg2); color: var(--text2);
+  border: 1px solid var(--border2);
+}
+.btn-ghost:hover { background: var(--bg3); color: var(--text); }
+.btn-danger { background: var(--rose-dim); color: var(--rose); border: 1px solid rgba(240,96,128,0.2); }
+.btn-danger:hover { background: var(--rose); color: white; }
+.btn-sm { padding: 6px 14px; font-size: 12px; }
+.btn-xs { padding: 4px 10px; font-size: 11px; }
+
+/* ── MODAL ── */
+.overlay {
+  display: none; position: fixed; inset: 0;
+  background: rgba(8,10,16,0.75);
+  backdrop-filter: blur(8px);
+  z-index: 500; align-items: center; justify-content: center; padding: 24px;
+}
+.overlay.open { display: flex; }
+
+.modal {
+  background: var(--bg1);
+  border: 1px solid var(--border2);
+  border-radius: 18px;
+  box-shadow: var(--shadow-lg);
+  max-width: 620px; width: 100%;
+  max-height: 88vh; overflow-y: auto;
+  animation: fadeup 0.22s ease;
+  position: relative;
+}
+
+.modal-top {
+  padding: 26px 26px 20px;
+  border-bottom: 1px solid var(--border);
+  display: flex; align-items: flex-start; gap: 16px;
+}
+
+.modal-subj {
+  font-size: 18px; font-weight: 700;
+  color: var(--text); letter-spacing: -0.4px;
+  flex: 1; line-height: 1.35;
+}
+
+.close-btn {
+  width: 32px; height: 32px; border-radius: 8px;
+  background: var(--bg2); border: 1px solid var(--border);
+  color: var(--text3); cursor: pointer; font-size: 16px;
+  display: flex; align-items: center; justify-content: center;
+  transition: all 0.15s; flex-shrink: 0;
+}
+.close-btn:hover { background: var(--bg3); color: var(--text); }
+
+.modal-body { padding: 22px 26px 26px; }
+
+.mfield { margin-bottom: 18px; }
+.mfield-lbl { font-size: 10.5px; font-weight: 600; color: var(--text3); text-transform: uppercase; letter-spacing: 0.8px; margin-bottom: 7px; }
+.mfield-val { font-size: 13.5px; color: var(--text2); }
+
+.email-body-box {
+  background: var(--bg2); border: 1px solid var(--border);
+  border-radius: var(--radius-sm); padding: 14px;
+  font-size: 13px; color: var(--text2); line-height: 1.7;
+  max-height: 140px; overflow-y: auto;
+}
+
+.reply-label {
+  display: flex; align-items: center; gap: 8px;
+  margin-bottom: 8px;
+}
+
+.ai-badge {
+  background: var(--teal-dim); color: var(--teal);
+  font-size: 10px; font-weight: 700; padding: 2px 8px;
+  border-radius: 4px; border: 1px solid rgba(56,217,176,0.2);
+}
+
+textarea.reply-ta {
+  width: 100%; min-height: 130px;
+  background: var(--bg2); border: 1px solid var(--border2);
+  border-radius: var(--radius-sm);
+  font-family: var(--font); font-size: 13.5px; color: var(--text);
+  padding: 13px 15px; resize: vertical; line-height: 1.65;
+  transition: border-color 0.15s, background 0.15s;
+}
+textarea.reply-ta::placeholder { color: var(--text3); }
+textarea.reply-ta:focus { outline: none; border-color: var(--teal); background: var(--bg3); }
+
+.modal-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 18px; }
+
+/* ── EMPTY ── */
+.empty {
+  text-align: center; padding: 48px 20px;
+  color: var(--text3);
+}
+.empty-ico { font-size: 36px; margin-bottom: 12px; opacity: 0.5; }
+.empty-txt { font-size: 13.5px; }
+
+/* ── SECTION HEADER ── */
+.section-head {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-bottom: 20px;
+}
+.section-title {
+  font-size: 20px; font-weight: 700;
+  color: var(--text); letter-spacing: -0.5px;
+}
+
+/* ── DIVIDER ── */
+.divider { height: 1px; background: var(--border); margin: 18px 0; }
+
+/* ── TOAST ── */
+#toast {
+  position: fixed; bottom: 24px; right: 24px; z-index: 9999;
+  background: var(--bg2); border: 1px solid var(--border2);
+  color: var(--text); padding: 12px 20px; border-radius: var(--radius-sm);
+  font-size: 13px; font-weight: 500;
+  box-shadow: var(--shadow);
+  opacity: 0; transform: translateY(10px);
+  transition: all 0.25s; pointer-events: none;
+}
+#toast.show { opacity: 1; transform: none; }
+
+/* ── SCROLLBARS ── */
+::-webkit-scrollbar { width: 5px; height: 5px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--bg3); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: var(--bg4); }
+
+/* ── STAGGER ANIMATIONS ── */
+.stat-card { animation: fadeup 0.4s ease both; }
+.stat-card:nth-child(1) { animation-delay: 0.05s; }
+.stat-card:nth-child(2) { animation-delay: 0.10s; }
+.stat-card:nth-child(3) { animation-delay: 0.15s; }
+.stat-card:nth-child(4) { animation-delay: 0.20s; }
+</style>
+</head>
+<body>
+
+<!-- SIDEBAR -->
+<aside class="sidebar">
+  <div class="logo-area">
+    <div class="logo-row">
+      <div class="logo-gem">🦞</div>
+      <div>
+        <div class="logo-name">LocalClaw</div>
+        <div class="logo-sub">Personal AI Gateway</div>
+      </div>
+    </div>
+  </div>
+
+  <nav class="nav">
+    <div class="nav-section">Overview</div>
+    <div class="nav-item active" onclick="showView('dashboard',this)">
+      <span class="nav-icon">⊞</span> Dashboard
+    </div>
+    <div class="nav-item" onclick="showView('emails',this)">
+      <span class="nav-icon">✉</span> Emails
+      <span class="nav-chip" id="unread-chip">0</span>
+    </div>
+
+    <div class="nav-section">Intelligence</div>
+    <div class="nav-item" onclick="showView('memory',this)">
+      <span class="nav-icon">◈</span> Memory
+    </div>
+    <div class="nav-item" onclick="showView('cron',this)">
+      <span class="nav-icon">◷</span> Cron Jobs
+    </div>
+
+    <div class="nav-section">System</div>
+    <div class="nav-item" onclick="showView('logs',this)">
+      <span class="nav-icon">≡</span> Logs
+    </div>
+    <div class="nav-item" onclick="showView('settings',this)">
+      <span class="nav-icon">⚙</span> Settings
+    </div>
+  </nav>
+
+  <div class="sidebar-foot">
+    <div class="model-pill">
+      <div class="model-lbl">Active Model</div>
+      <div class="model-nm" id="sb-model">—</div>
+      <div class="model-st ok" id="sb-ollama">
+        <div class="pulse-dot"></div> Checking…
+      </div>
+    </div>
+  </div>
+</aside>
+
+<!-- MAIN -->
+<div class="main">
+
+  <!-- TOPBAR -->
+  <header class="topbar">
+    <div class="topbar-left">
+      <div class="page-title" id="page-title">Dashboard</div>
+    </div>
+    <div class="topbar-right">
+      <div class="gw-badge offline" id="gw-badge">
+        <div class="pulse-dot"></div>
+        <span id="gw-txt">Connecting…</span>
+      </div>
+      <div class="clock-box" id="clock">--:--:--</div>
+    </div>
+  </header>
+
+  <!-- CONTENT -->
+  <div class="content">
+
+    <!-- ══ DASHBOARD ══ -->
+    <div class="view active" id="view-dashboard">
+      <div class="stats-row">
+        <div class="stat-card c-teal">
+          <div class="stat-head">
+            <div class="stat-icon teal">📨</div>
+            <div class="stat-badge neu" id="tr-proc">all time</div>
+          </div>
+          <div class="stat-num" id="s-proc">—</div>
+          <div class="stat-lbl">Emails Processed</div>
+        </div>
+        <div class="stat-card c-green">
+          <div class="stat-head">
+            <div class="stat-icon green">✓</div>
+            <div class="stat-badge up" id="tr-replied">—</div>
+          </div>
+          <div class="stat-num" id="s-replied">—</div>
+          <div class="stat-lbl">Replies Sent</div>
+        </div>
+        <div class="stat-card c-amber">
+          <div class="stat-head">
+            <div class="stat-icon amber">⧗</div>
+            <div class="stat-badge warn" id="tr-pend">—</div>
+          </div>
+          <div class="stat-num" id="s-pend">—</div>
+          <div class="stat-lbl">Pending</div>
+        </div>
+        <div class="stat-card c-blue">
+          <div class="stat-head">
+            <div class="stat-icon blue">◑</div>
+            <div class="stat-badge neu">uptime</div>
+          </div>
+          <div class="stat-num" id="s-uptime">—</div>
+          <div class="stat-lbl">Running For</div>
+        </div>
+      </div>
+
+      <div class="dash-grid">
+        <!-- Recent emails -->
+        <div class="panel">
+          <div class="panel-head">
+            <div class="panel-title">Recent Emails</div>
+            <button class="panel-action" onclick="switchToEmails()">View all</button>
+          </div>
+          <div class="panel-body">
+            <div id="dash-emails">
+              <div class="empty"><div class="empty-ico">📭</div><div class="empty-txt">No emails yet</div></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Right col -->
+        <div>
+          <!-- Identity -->
+          <div class="identity-card">
+            <div class="id-top">
+              <div class="id-avatar">🦞</div>
+              <div>
+                <div class="id-name" id="id-name">LocalClaw</div>
+                <div class="id-role" id="id-role">Personal AI · Email Assistant</div>
+                <div class="id-mood"><div class="pulse-dot"></div> Active</div>
+              </div>
+            </div>
+            <div class="id-stats">
+              <div class="idstat">
+                <div class="idstat-n" id="id-proc">—</div>
+                <div class="idstat-l">Processed</div>
+              </div>
+              <div class="idstat">
+                <div class="idstat-n" id="id-repl">—</div>
+                <div class="idstat-l">Replied</div>
+              </div>
+              <div class="idstat">
+                <div class="idstat-n" id="id-sndr">—</div>
+                <div class="idstat-l">Senders</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- System status -->
+          <div class="panel">
+            <div class="panel-head"><div class="panel-title">System Status</div></div>
+            <div class="panel-body" style="padding-top:4px;">
+              <div class="sys-row"><span class="sys-lbl">Gateway</span><span id="sys-gw" class="sys-val ok">Online</span></div>
+              <div class="sys-row"><span class="sys-lbl">Ollama</span><span id="sys-ollama" class="sys-val neu">—</span></div>
+              <div class="sys-row"><span class="sys-lbl">Hotmail Auth</span><span id="sys-hm" class="sys-val neu">—</span></div>
+              <div class="sys-row"><span class="sys-lbl">Dry Run</span><span id="sys-dry" class="sys-val warn">—</span></div>
+              <div class="sys-row"><span class="sys-lbl">Poll Every</span><span id="sys-poll" class="sys-val neu">—</span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ══ EMAILS ══ -->
+    <div class="view" id="view-emails">
+      <div class="section-head">
+        <div class="section-title">All Emails</div>
+        <button class="btn btn-ghost btn-sm" onclick="loadEmails()">↺ Refresh</button>
+      </div>
+      <div class="panel">
+        <div class="panel-body" style="padding-top:8px;">
+          <div id="all-emails"><div class="empty"><div class="empty-ico">📭</div><div class="empty-txt">No emails processed yet</div></div></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ══ MEMORY ══ -->
+    <div class="view" id="view-memory">
+      <div class="section-head"><div class="section-title">Memory</div></div>
+      <div class="panel" style="margin-bottom:18px;">
+        <div class="panel-head"><div class="panel-title">Add Memory</div></div>
+        <div class="panel-body">
+          <div class="mem-add-row">
+            <input class="inp" type="text" id="mem-k" placeholder="Key  (e.g. preferred_language)" style="flex:1;" />
+            <input class="inp" type="text" id="mem-v" placeholder="Value" style="flex:2;" />
+            <button class="btn btn-teal" onclick="addMemory()">+ Add</button>
+          </div>
+        </div>
+      </div>
+      <div class="panel">
+        <div class="panel-head"><div class="panel-title">Stored Memories</div></div>
+        <div class="panel-body">
+          <div id="mem-list"><div class="empty"><div class="empty-ico">🧠</div><div class="empty-txt">No memories yet</div></div></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ══ CRON ══ -->
+    <div class="view" id="view-cron">
+      <div class="section-head"><div class="section-title">Cron Jobs</div></div>
+      <div class="panel">
+        <div class="panel-body" style="padding-top:8px;">
+          <div id="cron-list"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ══ LOGS ══ -->
+    <div class="view" id="view-logs">
+      <div class="section-head">
+        <div class="section-title">System Logs</div>
+        <button class="btn btn-ghost btn-sm" onclick="loadLogs()">↺ Refresh</button>
+      </div>
+      <div class="panel">
+        <div class="panel-body" style="padding-top:4px;">
+          <div id="log-list"><div class="empty"><div class="empty-txt">No logs yet</div></div></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ══ SETTINGS ══ -->
+    <div class="view" id="view-settings">
+      <div class="section-head"><div class="section-title">Settings</div></div>
+      <div class="panel">
+        <div class="panel-body">
+
+          <div class="settings-group">
+            <div class="settings-group-title">Gateway Behaviour</div>
+            <div class="setting-row">
+              <div>
+                <div class="setting-lbl">Dry Run</div>
+                <div class="setting-sub">Generate AI replies without actually sending emails</div>
+              </div>
+              <div class="tog" id="dry-tog" onclick="toggleDryRun()"></div>
+            </div>
+            <div class="setting-row">
+              <div>
+                <div class="setting-lbl">Poll Interval</div>
+                <div class="setting-sub">How often LocalClaw checks your inbox (seconds)</div>
+              </div>
+              <div style="display:flex;gap:8px;align-items:center;">
+                <input type="number" class="num-inp" id="poll-inp" value="30" min="10" max="3600" />
+                <button class="btn btn-ghost btn-sm" onclick="savePoll()">Save</button>
+              </div>
+            </div>
+          </div>
+
+          <div class="settings-group">
+            <div class="settings-group-title">Account</div>
+            <div class="setting-row">
+              <div><div class="setting-lbl">Email</div><div class="setting-sub">Connected Hotmail account</div></div>
+              <div style="font-size:13px;color:var(--text2);font-family:var(--mono);" id="cfg-email">—</div>
+            </div>
+            <div class="setting-row">
+              <div><div class="setting-lbl">Owner</div><div class="setting-sub">Configured in config.py</div></div>
+              <div style="font-size:13px;color:var(--text2);" id="cfg-owner">—</div>
+            </div>
+            <div class="setting-row">
+              <div><div class="setting-lbl">AI Model</div><div class="setting-sub">Local Ollama model</div></div>
+              <div style="font-size:13px;font-weight:600;color:var(--teal);font-family:var(--mono);" id="cfg-model">—</div>
+            </div>
+          </div>
+
+        </div>
+      </div>
+    </div>
+
+  </div><!-- /content -->
+</div><!-- /main -->
+
+<!-- EMAIL MODAL -->
+<div class="overlay" id="modal">
+  <div class="modal">
+    <div class="modal-top">
+      <div class="modal-subj" id="m-subj">—</div>
+      <button class="close-btn" onclick="closeModal()">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="mfield">
+        <div class="mfield-lbl">From</div>
+        <div class="mfield-val" id="m-from">—</div>
+      </div>
+      <div class="mfield">
+        <div class="mfield-lbl">Received</div>
+        <div class="mfield-val" id="m-time">—</div>
+      </div>
+      <div class="mfield">
+        <div class="mfield-lbl">Message</div>
+        <div class="email-body-box" id="m-body">—</div>
+      </div>
+      <div class="divider"></div>
+      <div>
+        <div class="reply-label">
+          <div class="mfield-lbl" style="margin:0;">AI Reply Draft</div>
+          <div class="ai-badge">✦ AI</div>
+        </div>
+        <textarea class="reply-ta" id="m-reply" placeholder="Generating reply…"></textarea>
+      </div>
+      <div class="modal-actions">
+        <button class="btn btn-ghost" onclick="closeModal()">Discard</button>
+        <button class="btn btn-teal" id="send-btn" onclick="sendReply()">Send Reply →</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+const API = 'http://127.0.0.1:5000/api';
+let _status = null;
+let _curEmail = null;
+
+// ── CLOCK ─────────────────────────────────────────────────────────────────────
+function tick() { document.getElementById('clock').textContent = new Date().toTimeString().slice(0,8); }
+setInterval(tick, 1000); tick();
+
+// ── TOAST ─────────────────────────────────────────────────────────────────────
+function toast(msg, ms = 2800) {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.classList.add('show');
+  clearTimeout(el._t);
+  el._t = setTimeout(() => el.classList.remove('show'), ms);
+}
+
+// ── NAV ───────────────────────────────────────────────────────────────────────
+const TITLES = { dashboard:'Dashboard', emails:'Emails', memory:'Memory', cron:'Cron Jobs', logs:'Logs', settings:'Settings' };
+
+function showView(id, el) {
+  document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+  document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+  document.getElementById('view-' + id).classList.add('active');
+  el.classList.add('active');
+  document.getElementById('page-title').textContent = TITLES[id] || id;
+  if (id === 'emails')   loadEmails();
+  if (id === 'memory')   loadMemory();
+  if (id === 'logs')     loadLogs();
+  if (id === 'cron')     renderCron(_status?.cron_jobs);
+  if (id === 'settings') loadSettings();
+}
+
+function switchToEmails() {
+  const el = document.querySelectorAll('.nav-item')[1];
+  showView('emails', el);
+}
+
+// ── API ───────────────────────────────────────────────────────────────────────
+async function api(path, opts = {}) {
+  try {
+    const r = await fetch(API + path, { headers:{'Content-Type':'application/json'}, ...opts });
+    return r.json();
+  } catch { return null; }
+}
+
+// ── STATUS ────────────────────────────────────────────────────────────────────
+async function pollStatus() {
+  const d = await api('/status');
+  if (!d) { setOffline(); return; }
+  _status = d;
+  applyStatus(d);
+}
+
+function setOffline() {
+  const b = document.getElementById('gw-badge');
+  b.className = 'gw-badge offline';
+  document.getElementById('gw-txt').textContent = 'Offline';
+}
+
+function applyStatus(d) {
+  document.getElementById('gw-badge').className = 'gw-badge online';
+  document.getElementById('gw-txt').textContent = 'Online';
+
+  const s = d.stats || {};
+  const proc    = s.emails_processed || 0;
+  const replied = s.replies_sent || 0;
+  const skipped = s.emails_skipped || 0;
+  const pending = Math.max(0, proc - replied - skipped);
+
+  animNum('s-proc', proc);
+  animNum('s-replied', replied);
+  animNum('s-pend', pending);
+  animNum('id-proc', proc);
+  animNum('id-repl', replied);
+
+  const u = d.uptime_seconds || 0;
+  const h = Math.floor(u/3600), m = Math.floor((u%3600)/60);
+  document.getElementById('s-uptime').textContent = h > 0 ? `${h}h ${m}m` : `${m}m`;
+
+  const id = d.identity || {};
+  document.getElementById('id-name').textContent = id.name || 'LocalClaw';
+  document.getElementById('id-role').textContent = `Owner: ${id.owner || '—'} · Email Assistant`;
+
+  const model = d.model || '—';
+  document.getElementById('sb-model').textContent = model;
+  const ollamaOk = d.ollama === 'running';
+  const ollamaEl = document.getElementById('sb-ollama');
+  ollamaEl.className = `model-st ${ollamaOk ? 'ok' : 'err'}`;
+  ollamaEl.innerHTML = `<div class="pulse-dot"></div> ${ollamaOk ? 'Running' : 'Offline'}`;
+
+  setVal('sys-ollama', ollamaOk ? 'Running' : 'Offline', ollamaOk ? 'ok' : 'err');
+  setVal('sys-hm', d.hotmail === 'ok' ? 'Authenticated' : 'Error', d.hotmail === 'ok' ? 'ok' : 'err');
+  const dry = d.dry_run;
+  setVal('sys-dry', dry ? 'Enabled' : 'Disabled', dry ? 'warn' : 'ok');
+  document.getElementById('sys-poll').textContent = `${d.poll_interval}s`;
+  document.getElementById('sys-poll').className = 'sys-val neu';
+  document.getElementById('dry-tog').classList.toggle('on', dry);
+  document.getElementById('poll-inp').value = d.poll_interval || 30;
+}
+
+function setVal(id, text, cls) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.textContent = text;
+  el.className = `sys-val ${cls}`;
+}
+
+// Animate numbers
+const _prev = {};
+function animNum(id, target) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  const from = _prev[id] || 0;
+  if (from === target) { el.textContent = target; return; }
+  _prev[id] = target;
+  let cur = from;
+  const step = Math.max(1, Math.ceil(Math.abs(target - from) / 25));
+  const t = setInterval(() => {
+    cur = cur < target ? Math.min(cur+step, target) : Math.max(cur-step, target);
+    el.textContent = cur;
+    if (cur === target) clearInterval(t);
+  }, 28);
+}
+
+// ── EMAILS ────────────────────────────────────────────────────────────────────
+function avatarBg(str) {
+  const palette = ['#2a6ae8','#e8622a','#1a8a5a','#7a1a8a','#8a7a1a','#1a7a8a','#8a2a5a'];
+  let h = 5381;
+  for (let c of str) h = ((h << 5) + h) ^ c.charCodeAt(0);
+  return palette[Math.abs(h) % palette.length];
+}
+
+function fmtT(iso) {
+  if (!iso) return '—';
+  const d = new Date(iso);
+  if (isNaN(d)) return iso;
+  return d.toDateString() === new Date().toDateString()
+    ? d.toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'})
+    : d.toLocaleDateString([], {month:'short', day:'numeric'});
+}
+
+function emailRow(e) {
+  const bg  = avatarBg(e.from || '');
+  const ltr = (e.name || e.from || '?')[0].toUpperCase();
+  const label = {replied:'Replied',draft:'Draft',skipped:'Skipped',read:'Read',unread:'New'}[e.status] || 'Unknown';
+  return `<div class="email-row" onclick='openEmail(${JSON.stringify(e).replace(/'/g,"&#39;")})'>
+    <div class="email-av" style="background:${bg}">${ltr}</div>
+    <div class="email-info">
+      <div class="email-from">${e.name || e.from || '—'}</div>
+      <div class="email-subj">${e.subject || '(no subject)'}</div>
+    </div>
+    <div class="email-meta">
+      <div class="email-time">${fmtT(e.recorded_at)}</div>
+      <div class="tag ${e.status || 'read'}">${label}</div>
+    </div>
+  </div>`;
+}
+
+async function loadDashboard() {
+  const emails = await api('/emails?limit=8');
+  if (!emails) return;
+  const pending = emails.filter(e => ['unread','draft'].includes(e.status)).length;
+  document.getElementById('unread-chip').textContent = pending;
+  const el = document.getElementById('dash-emails');
+  el.innerHTML = emails.length
+    ? emails.map(emailRow).join('')
+    : '<div class="empty"><div class="empty-ico">📭</div><div class="empty-txt">No emails yet</div></div>';
+}
+
+async function loadEmails() {
+  const emails = await api('/emails?limit=50');
+  if (!emails) return;
+  const el = document.getElementById('all-emails');
+  el.innerHTML = emails.length
+    ? emails.map(emailRow).join('')
+    : '<div class="empty"><div class="empty-ico">📭</div><div class="empty-txt">No emails processed yet</div></div>';
+  const senders = new Set(emails.map(e => e.from).filter(Boolean)).size;
+  animNum('id-sndr', senders);
+}
+
+// ── MODAL ─────────────────────────────────────────────────────────────────────
+async function openEmail(e) {
+  _curEmail = e;
+  document.getElementById('m-subj').textContent = e.subject || '(no subject)';
+  document.getElementById('m-from').textContent = e.name ? `${e.name} <${e.from}>` : e.from;
+  document.getElementById('m-time').textContent = e.recorded_at ? new Date(e.recorded_at).toLocaleString() : '—';
+  document.getElementById('m-body').textContent = e.body || '—';
+  document.getElementById('m-reply').value = e.reply || '';
+  document.getElementById('modal').classList.add('open');
+
+  if (!e.reply) {
+    document.getElementById('m-reply').placeholder = 'Generating reply…';
+    const res = await api('/generate_reply', {
+      method:'POST',
+      body: JSON.stringify({from:e.from, subject:e.subject, body:e.body}),
+    });
+    if (res?.reply) typewriter(document.getElementById('m-reply'), res.reply);
+    else document.getElementById('m-reply').placeholder = 'Could not generate reply — check Ollama.';
+  }
+}
+
+function closeModal() {
+  document.getElementById('modal').classList.remove('open');
+  _curEmail = null;
+}
+
+document.getElementById('modal').addEventListener('click', e => {
+  if (e.target === e.currentTarget) closeModal();
+});
+
+function typewriter(el, text) {
+  el.value = ''; let i = 0;
+  const t = setInterval(() => {
+    el.value += text[i++];
+    el.scrollTop = el.scrollHeight;
+    if (i >= text.length) clearInterval(t);
+  }, 10);
+}
+
+async function sendReply() {
+  if (!_curEmail) return;
+  const reply = document.getElementById('m-reply').value.trim();
+  if (!reply) { toast('⚠ Reply is empty'); return; }
+  const btn = document.getElementById('send-btn');
+  btn.textContent = 'Sending…'; btn.disabled = true;
+  const res = await api('/reply', {
+    method:'POST',
+    body: JSON.stringify({email_id:_curEmail.id, to:_curEmail.from, subject:_curEmail.subject, reply_text:reply}),
+  });
+  btn.textContent = 'Send Reply →'; btn.disabled = false;
+  if (res?.ok) { toast('✅ Reply sent!'); closeModal(); loadDashboard(); }
+  else toast('❌ Send failed — check dry run mode.');
+}
+
+// ── MEMORY ────────────────────────────────────────────────────────────────────
+async function loadMemory() {
+  const d = await api('/memory');
+  if (!d) return;
+  const mem = d.memory || {};
+  const el = document.getElementById('mem-list');
+  const keys = Object.keys(mem);
+  el.innerHTML = keys.length ? keys.map(k => `
+    <div class="mem-item">
+      <div class="mem-key">${k}</div>
+      <div class="mem-val">${mem[k].value}</div>
+      <div class="mem-ts">${fmtT(mem[k].updated_at)}</div>
+      <button class="btn btn-danger btn-xs" onclick="delMemory('${k}')">Delete</button>
+    </div>
+  `).join('') : '<div class="empty"><div class="empty-ico">🧠</div><div class="empty-txt">No memories stored yet</div></div>';
+
+  const senders = Object.keys(d.senders || {}).length;
+  animNum('id-sndr', senders);
+}
+
+async function addMemory() {
+  const k = document.getElementById('mem-k').value.trim();
+  const v = document.getElementById('mem-v').value.trim();
+  if (!k || !v) { toast('⚠ Both key and value required'); return; }
+  await api('/memory', {method:'POST', body:JSON.stringify({key:k, value:v})});
+  document.getElementById('mem-k').value = '';
+  document.getElementById('mem-v').value = '';
+  toast('✅ Memory saved');
+  loadMemory();
+}
+
+async function delMemory(key) {
+  if (!confirm(`Delete memory "${key}"?`)) return;
+  await api('/memory/' + encodeURIComponent(key), {method:'DELETE'});
+  toast('🗑 Memory deleted');
+  loadMemory();
+}
+
+// ── CRON ──────────────────────────────────────────────────────────────────────
+const CRON_ICONS = {poll_inbox:'📬', daily_summary:'📊', memory_cleanup:'🧹'};
+
+function renderCron(jobs) {
+  if (!jobs) return;
+  document.getElementById('cron-list').innerHTML = Object.entries(jobs).map(([id, j]) => `
+    <div class="cron-item">
+      <div class="cron-icon">${CRON_ICONS[id] || '⚙'}</div>
+      <div class="cron-info">
+        <div class="cron-name">${j.name}</div>
+        <div class="cron-sch">${j.schedule}</div>
+        <div class="cron-last">Last run: ${j.last_run ? fmtT(j.last_run) : 'Never'}</div>
+      </div>
+      <div class="tog ${j.enabled?'on':''}" onclick="toggleCron('${id}',this)"></div>
+    </div>
+  `).join('');
+}
+
+async function toggleCron(id, el) {
+  const on = !el.classList.contains('on');
+  el.classList.toggle('on', on);
+  await api('/cron/'+id, {method:'PATCH', body:JSON.stringify({enabled:on})});
+  toast(on ? `✅ ${id} enabled` : `⏸ ${id} paused`);
+}
+
+// ── LOGS ─────────────────────────────────────────────────────────────────────
+async function loadLogs() {
+  const logs = await api('/logs?n=100');
+  if (!logs) return;
+  document.getElementById('log-list').innerHTML = logs.length ? logs.map(l => `
+    <div class="log-line">
+      <span class="log-ts">${l.ts?.slice(11,19)||''}</span>
+      <span class="log-lvl ${l.level}">${(l.level||'info').slice(0,4).toUpperCase()}</span>
+      <span class="log-msg">${l.message}</span>
+    </div>
+  `).join('') : '<div class="empty"><div class="empty-txt">No logs yet</div></div>';
+}
+
+// ── SETTINGS ─────────────────────────────────────────────────────────────────
+async function loadSettings() {
+  const cfg = await api('/config');
+  if (!cfg) return;
+  document.getElementById('cfg-email').textContent = cfg.email || '—';
+  document.getElementById('cfg-owner').textContent = cfg.owner || '—';
+  document.getElementById('cfg-model').textContent = cfg.model || '—';
+  document.getElementById('poll-inp').value = cfg.poll_interval || 30;
+  document.getElementById('dry-tog').classList.toggle('on', cfg.dry_run);
+}
+
+async function toggleDryRun() {
+  const t = document.getElementById('dry-tog');
+  const newVal = !t.classList.contains('on');
+  t.classList.toggle('on', newVal);
+  await api('/config', {method:'PATCH', body:JSON.stringify({dry_run:newVal})});
+  toast(newVal ? '🔒 Dry run ON — replies won\'t be sent' : '🚀 Dry run OFF — replies will be sent!', 3500);
+  pollStatus();
+}
+
+async function savePoll() {
+  const v = parseInt(document.getElementById('poll-inp').value);
+  if (isNaN(v) || v < 10) { toast('⚠ Minimum 10 seconds'); return; }
+  await api('/config', {method:'PATCH', body:JSON.stringify({poll_interval:v})});
+  toast(`✅ Poll interval set to ${v}s`);
+}
+
+// ── BOOT ─────────────────────────────────────────────────────────────────────
+async function boot() {
+  await pollStatus();
+  await loadDashboard();
+}
+boot();
+setInterval(pollStatus, 10_000);
+setInterval(loadDashboard, 30_000);
+</script>
+</body>
+</html>
