@@ -11,7 +11,7 @@ OWNER_NAME   = "Imran"                  # Your name — used in memory + persona
 ASSISTANT_NAME = "LocalClaw"           # Assistant name shown in dashboard + replies
 
 # ── Hotmail / Microsoft Graph ─────────────────────────────────────────────────
-EMAIL_ADDRESS = "imranraad@live.co.uk"       # Your Hotmail / Outlook / Live address
+EMAIL_ADDRESS = ""       # Your Hotmail / Outlook / Live address
 
 # ── Ollama (local AI model) ───────────────────────────────────────────────────
 OLLAMA_BASE_URL = "http://localhost:11434"
