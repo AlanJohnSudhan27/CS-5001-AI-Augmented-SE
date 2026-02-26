@@ -1,0 +1,15 @@
+README.md
+setup.py
+github_agent/__init__.py
+github_agent/analyzer.py
+github_agent/categorizer.py
+github_agent/cli.py
+github_agent/git_utils.py
+github_agent/reporter.py
+github_agent/risk_assessor.py
+github_review_agent.egg-info/PKG-INFO
+github_review_agent.egg-info/SOURCES.txt
+github_review_agent.egg-info/dependency_links.txt
+github_review_agent.egg-info/entry_points.txt
+github_review_agent.egg-info/requires.txt
+github_review_agent.egg-info/top_level.txt

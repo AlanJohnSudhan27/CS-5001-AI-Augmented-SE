@@ -1,0 +1,2 @@
+[console_scripts]
+github-review = github_agent.cli:cli
