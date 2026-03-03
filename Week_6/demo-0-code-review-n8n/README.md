@@ -64,8 +64,8 @@ Each agent receives all previous agents' outputs in its prompt — the same
 # Check first — need v18+
 node --version
 
-# Ubuntu/Debian: install Node 20 if needed
-curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
+# Ubuntu/Debian: install Node 22 if needed
+curl -fsSL https://deb.nodesource.com/setup_22.x | sudo -E bash -
 sudo apt-get install -y nodejs
 ```
 
