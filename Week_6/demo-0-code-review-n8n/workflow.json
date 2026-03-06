@@ -1,0 +1,153 @@
+{
+  "name": "Code Review Pipeline — Ollama + n8n",
+  "nodes": [
+    {
+      "id": "node-webhook",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [0, 300],
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "code-review",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "webhookId": "code-review-pipeline"
+    },
+    {
+      "id": "node-read-files",
+      "name": "Read Source Files",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [280, 300],
+      "parameters": {
+        "jsCode": "// Read up to 10 source files from the given path.\n// Requires self-hosted n8n (filesystem access via require('fs')).\nconst fs = require('fs');\nconst nodePath = require('path');\n\nconst targetPath = $input.first().json.body?.path || $input.first().json.path;\nif (!targetPath) throw new Error('No path provided. POST body must include { \"path\": \"/your/path\" }');\n\nconst SOURCE_EXTS = new Set(['.py','.js','.ts','.jsx','.tsx','.go','.rs','.java','.rb','.php','.c','.cpp','.cs','.swift']);\nconst MAX_FILES = 10;\nconst MAX_CHARS = 4000;\n\nfunction collectFiles(p) {\n  const stat = fs.statSync(p);\n  if (stat.isFile()) return [p];\n  const results = [];\n  for (const entry of fs.readdirSync(p).sort()) {\n    if (results.length >= MAX_FILES) break;\n    if (entry.startsWith('.') || ['__pycache__','node_modules','venv','.git'].includes(entry)) continue;\n    const full = nodePath.join(p, entry);\n    const s = fs.statSync(full);\n    if (s.isFile() && SOURCE_EXTS.has(nodePath.extname(full))) results.push(full);\n  }\n  return results;\n}\n\nconst files = collectFiles(targetPath);\nif (files.length === 0) throw new Error('No source files found at: ' + targetPath);\n\nconst content = files.map(f => {\n  const text = fs.readFileSync(f, 'utf8').slice(0, MAX_CHARS);\n  return `=== ${f} ===\\n${text}`;\n}).join('\\n\\n');\n\nreturn [{ json: { target_path: targetPath, files, file_count: files.length, content } }];"
+      }
+    },
+    {
+      "id": "node-analyzer",
+      "name": "Analyzer",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [560, 300],
+      "parameters": {
+        "method": "POST",
+        "url": "http://localhost:11434/api/chat",
+        "sendHeaders": false,
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ model: 'llama3.2:3b', messages: [ { role: 'system', content: 'You are the Analyzer — Stage 1 of a code review pipeline. Examine the provided source code. Return ONLY a JSON object with these fields: files_analyzed (array of filenames), language (string), loc_total (integer), functions (array of function names), classes (array of class names), imports (array of import names), complexity_notes (array of strings noting complex areas), summary (2-3 sentence overview).' }, { role: 'user', content: 'Analyze the code at: ' + $('Read Source Files').first().json.target_path + '\\n\\n' + $('Read Source Files').first().json.content } ], stream: false, format: 'json', options: { temperature: 0.1, num_predict: 1024 } }) }}",
+        "options": {}
+      }
+    },
+    {
+      "id": "node-reviewer",
+      "name": "Reviewer",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [840, 300],
+      "parameters": {
+        "method": "POST",
+        "url": "http://localhost:11434/api/chat",
+        "sendHeaders": false,
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ model: 'llama3.2:3b', messages: [ { role: 'system', content: 'You are the Reviewer — Stage 2 of a code review pipeline. Identify bugs, security issues, code smells, and style problems. Return ONLY a JSON object: { issues: [ { severity: (critical|high|medium|low), category: (bugs|security|code_smell|style), description, location, evidence } ], overall_risk: (critical|high|medium|low), files_reviewed: [], summary }.' }, { role: 'user', content: 'Review code at: ' + $('Read Source Files').first().json.target_path + '\\n\\n=== ANALYZER OUTPUT ===\\n' + $('Analyzer').first().json.message.content + '\\n\\n=== SOURCE CODE ===\\n' + $('Read Source Files').first().json.content } ], stream: false, format: 'json', options: { temperature: 0.1, num_predict: 1024 } }) }}",
+        "options": {}
+      }
+    },
+    {
+      "id": "node-suggester",
+      "name": "Suggester",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1120, 300],
+      "parameters": {
+        "method": "POST",
+        "url": "http://localhost:11434/api/chat",
+        "sendHeaders": false,
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ model: 'llama3.2:3b', messages: [ { role: 'system', content: 'You are the Suggester — Stage 3 of a code review pipeline. Propose concrete improvements ranked by impact (priority 1 = highest). Include before/after code snippets. Return ONLY a JSON object: { improvements: [ { priority, title, rationale, addresses_issue, before, after } ], quick_wins: [], summary }.' }, { role: 'user', content: 'Suggest improvements for: ' + $('Read Source Files').first().json.target_path + '\\n\\n=== ANALYZER OUTPUT ===\\n' + $('Analyzer').first().json.message.content + '\\n\\n=== REVIEWER OUTPUT ===\\n' + $('Reviewer').first().json.message.content + '\\n\\n=== SOURCE CODE ===\\n' + $('Read Source Files').first().json.content } ], stream: false, format: 'json', options: { temperature: 0.1, num_predict: 1024 } }) }}",
+        "options": {}
+      }
+    },
+    {
+      "id": "node-summarizer",
+      "name": "Summarizer",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1400, 300],
+      "parameters": {
+        "method": "POST",
+        "url": "http://localhost:11434/api/chat",
+        "sendHeaders": false,
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ model: 'llama3.2:3b', messages: [ { role: 'system', content: 'You are the Summarizer — the final stage of a code review pipeline. Synthesize all previous outputs into an executive report. Score 0-100: start at 100, deduct 15 per critical/high issue, 5 per medium, 10 for high complexity. Return ONLY a JSON object: { executive_summary: (2-3 non-technical sentences), overall_score: (integer 0-100), critical_findings: [], top_improvements: [] }.' }, { role: 'user', content: 'Synthesize report for: ' + $('Read Source Files').first().json.target_path + '\\n\\n=== ANALYZER OUTPUT ===\\n' + $('Analyzer').first().json.message.content + '\\n\\n=== REVIEWER OUTPUT ===\\n' + $('Reviewer').first().json.message.content + '\\n\\n=== SUGGESTER OUTPUT ===\\n' + $('Suggester').first().json.message.content } ], stream: false, format: 'json', options: { temperature: 0.1, num_predict: 512 } }) }}",
+        "options": {}
+      }
+    },
+    {
+      "id": "node-build-report",
+      "name": "Build Report",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1680, 300],
+      "parameters": {
+        "jsCode": "// Parse JSON from each agent's raw text response.\n// Uses 3-strategy fallback: fenced block → whole text → largest {…}\nfunction parseJSON(text) {\n  if (!text) return {};\n  // Strategy 1: fenced block\n  const m = text.match(/```(?:json)?\\s*([\\s\\S]*?)```/);\n  if (m) { try { return JSON.parse(m[1].trim()); } catch(e) {} }\n  // Strategy 2: whole text\n  try { return JSON.parse(text.trim()); } catch(e) {}\n  // Strategy 3: largest { } block\n  let best = '', depth = 0, start = -1;\n  for (let i = 0; i < text.length; i++) {\n    if (text[i] === '{') { if (depth++ === 0) start = i; }\n    else if (text[i] === '}' && depth > 0) {\n      if (--depth === 0) { const c = text.slice(start, i+1); if (c.length > best.length) best = c; }\n    }\n  }\n  if (best) { try { return JSON.parse(best); } catch(e) {} }\n  return {};\n}\n\nconst target    = $('Read Source Files').first().json.target_path;\nconst analysis  = parseJSON($('Analyzer').first().json.message?.content);\nconst review    = parseJSON($('Reviewer').first().json.message?.content);\nconst suggestions = parseJSON($('Suggester').first().json.message?.content);\nconst summary   = parseJSON($('Summarizer').first().json.message?.content);\n\nreturn [{ json: {\n  target_path: target,\n  generated_at: new Date().toISOString(),\n  overall_score:      summary.overall_score      || 50,\n  executive_summary:  summary.executive_summary  || '',\n  critical_findings:  summary.critical_findings  || [],\n  top_improvements:   summary.top_improvements   || [],\n  analysis,\n  review,\n  suggestions\n} }];"
+      }
+    },
+    {
+      "id": "node-respond",
+      "name": "Respond to Webhook",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [1960, 300],
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}",
+        "options": {
+          "responseCode": 200
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [[{ "node": "Read Source Files", "type": "main", "index": 0 }]]
+    },
+    "Read Source Files": {
+      "main": [[{ "node": "Analyzer", "type": "main", "index": 0 }]]
+    },
+    "Analyzer": {
+      "main": [[{ "node": "Reviewer", "type": "main", "index": 0 }]]
+    },
+    "Reviewer": {
+      "main": [[{ "node": "Suggester", "type": "main", "index": 0 }]]
+    },
+    "Suggester": {
+      "main": [[{ "node": "Summarizer", "type": "main", "index": 0 }]]
+    },
+    "Summarizer": {
+      "main": [[{ "node": "Build Report", "type": "main", "index": 0 }]]
+    },
+    "Build Report": {
+      "main": [[{ "node": "Respond to Webhook", "type": "main", "index": 0 }]]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "id": "code-review-pipeline",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "local"
+  }
+}

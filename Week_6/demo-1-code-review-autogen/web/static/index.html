@@ -1,0 +1,751 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Code Review — AutoGen</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:        #0d1117;
+      --surface:   #161b22;
+      --surface2:  #1c2128;
+      --border:    #30363d;
+      --text:      #e6edf3;
+      --muted:     #8b949e;
+      --analyzer:  #58a6ff;
+      --reviewer:  #bc8cff;
+      --suggester: #3fb950;
+      --summarizer:#e3b341;
+      --error:     #f85149;
+      --tool:      #4d97e8;
+    }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      font-size: 14px;
+      min-height: 100vh;
+    }
+
+    /* ── Header ───────────────────────────────────────────── */
+    header {
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      padding: 14px 24px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .logo-icon {
+      width: 34px; height: 34px;
+      background: linear-gradient(135deg, #0078d4, var(--reviewer));
+      border-radius: 8px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 17px; flex-shrink: 0;
+    }
+    .logo h1 { font-size: 16px; font-weight: 600; }
+    .logo p  { font-size: 11px; color: var(--muted); margin-top: 1px; }
+    .autogen-badge {
+      margin-left: auto;
+      background: color-mix(in srgb, #0078d4 15%, transparent);
+      border: 1px solid color-mix(in srgb, #0078d4 40%, transparent);
+      color: #4da6ff;
+      font-size: 10px; font-weight: 700;
+      padding: 3px 8px; border-radius: 4px;
+      letter-spacing: 0.5px;
+    }
+
+    /* ── Main ─────────────────────────────────────────────── */
+    main { max-width: 1080px; margin: 0 auto; padding: 24px; }
+
+    /* ── Diff callout ─────────────────────────────────────── */
+    .diff-callout {
+      background: color-mix(in srgb, #0078d4 8%, transparent);
+      border: 1px solid color-mix(in srgb, #0078d4 30%, transparent);
+      border-radius: 8px; padding: 10px 14px;
+      font-size: 12px; color: var(--muted);
+      margin-bottom: 18px; line-height: 1.6;
+    }
+    .diff-callout strong { color: var(--text); }
+
+    /* ── Input card ───────────────────────────────────────── */
+    .input-card {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 8px; padding: 16px 18px; margin-bottom: 20px;
+    }
+    .input-row { display: flex; gap: 8px; align-items: flex-end; }
+    .input-group { flex: 1; display: flex; flex-direction: column; gap: 5px; }
+    .input-group label {
+      font-size: 11px; color: var(--muted); font-weight: 600;
+      text-transform: uppercase; letter-spacing: 0.5px;
+    }
+    .path-wrapper { display: flex; }
+    .path-wrapper input {
+      flex: 1;
+      background: var(--bg); border: 1px solid var(--border);
+      border-right: none;
+      border-radius: 6px 0 0 6px;
+      color: var(--text); font-size: 13px;
+      padding: 8px 10px; outline: none;
+      font-family: "SF Mono", "Fira Code", monospace;
+      transition: border-color 0.15s;
+    }
+    .path-wrapper input:focus { border-color: var(--analyzer); }
+    .browse-btn {
+      background: var(--surface2); color: var(--muted);
+      border: 1px solid var(--border); border-radius: 0 6px 6px 0;
+      padding: 8px 12px; font-size: 12px; cursor: pointer;
+      white-space: nowrap; transition: color 0.15s, border-color 0.15s;
+    }
+    .browse-btn:hover { color: var(--text); border-color: var(--analyzer); }
+    .run-row { display: flex; justify-content: flex-end; padding-top: 10px; }
+    .run-btn {
+      background: var(--analyzer); color: #000;
+      border: none; border-radius: 6px;
+      padding: 8px 20px; font-size: 13px; font-weight: 600;
+      cursor: pointer; transition: opacity 0.15s;
+    }
+    .run-btn:hover { opacity: 0.85; }
+    .run-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+    /* ── Pipeline bar ─────────────────────────────────────── */
+    .pipeline {
+      display: grid; grid-template-columns: repeat(4, 1fr);
+      gap: 10px; margin-bottom: 20px;
+    }
+    .agent-card {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 8px; padding: 12px 14px;
+      transition: border-color 0.3s, box-shadow 0.3s;
+    }
+    .agent-card[data-agent="Analyzer"]   { --ac: var(--analyzer); }
+    .agent-card[data-agent="Reviewer"]   { --ac: var(--reviewer); }
+    .agent-card[data-agent="Suggester"]  { --ac: var(--suggester); }
+    .agent-card[data-agent="Summarizer"] { --ac: var(--summarizer); }
+    .agent-card.running {
+      border-color: var(--ac);
+      box-shadow: 0 0 10px color-mix(in srgb, var(--ac) 25%, transparent);
+    }
+    .agent-card.done { border-color: var(--ac); opacity: 0.7; }
+    .agent-header { display: flex; align-items: center; gap: 7px; margin-bottom: 3px; }
+    .agent-dot {
+      width: 7px; height: 7px; border-radius: 50%;
+      background: var(--border); transition: background 0.3s; flex-shrink: 0;
+    }
+    .agent-card.running .agent-dot { background: var(--ac); animation: pulse 1s infinite; }
+    .agent-card.done    .agent-dot { background: var(--ac); }
+    @keyframes pulse { 0%,100% { opacity:1; } 50% { opacity:0.35; } }
+    .agent-name { font-weight: 600; font-size: 12px; color: var(--muted); }
+    .agent-card.running .agent-name,
+    .agent-card.done    .agent-name { color: var(--ac); }
+    .agent-sub  { font-size: 11px; color: var(--muted); margin-left: 14px; }
+    .agent-loop { font-size: 10px; color: var(--border); margin-left: 14px; margin-top: 2px; font-family: monospace; }
+    .agent-card.running .agent-loop { color: var(--ac); opacity: 0.6; }
+
+    /* ── Error ────────────────────────────────────────────── */
+    #error-msg {
+      display: none;
+      background: color-mix(in srgb, var(--error) 12%, transparent);
+      border: 1px solid var(--error); border-radius: 8px;
+      padding: 12px 16px; color: var(--error); margin-bottom: 16px; font-size: 13px;
+    }
+
+    /* ── Log terminal ─────────────────────────────────────── */
+    .log-section {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 8px; overflow: hidden; margin-bottom: 20px;
+    }
+    .log-titlebar {
+      background: var(--surface2); border-bottom: 1px solid var(--border);
+      padding: 7px 14px; display: flex; align-items: center; gap: 8px;
+    }
+    .log-dots { display: flex; gap: 5px; }
+    .log-dots span { width: 10px; height: 10px; border-radius: 50%; }
+    .log-dots span:nth-child(1) { background: #f85149; }
+    .log-dots span:nth-child(2) { background: #e3b341; }
+    .log-dots span:nth-child(3) { background: #3fb950; }
+    .log-title { font-size: 11px; color: var(--muted); margin-left: 4px; }
+    .log-note  { font-size: 10px; color: var(--border); margin-left: auto; }
+    #log {
+      font-family: "SF Mono", "Fira Code", "Consolas", monospace;
+      font-size: 12px; line-height: 1.7;
+      padding: 12px 14px;
+      max-height: 380px; min-height: 80px;
+      overflow-y: auto; background: var(--bg);
+    }
+    .log-line { display: flex; gap: 0; margin-bottom: 1px; }
+    .log-ts   { color: var(--border); min-width: 52px; flex-shrink: 0; font-size: 10px; padding-top: 1px; }
+    .log-badge {
+      font-size: 10px; font-weight: 700; padding: 1px 5px;
+      border-radius: 3px; margin-right: 7px; flex-shrink: 0;
+      align-self: flex-start; margin-top: 1px;
+    }
+    .log-msg { color: var(--muted); flex: 1; }
+
+    .log-line[data-agent="Analyzer"]    .log-badge { background: color-mix(in srgb,var(--analyzer)   20%,transparent); color:var(--analyzer); }
+    .log-line[data-agent="Reviewer"]    .log-badge { background: color-mix(in srgb,var(--reviewer)   20%,transparent); color:var(--reviewer); }
+    .log-line[data-agent="Suggester"]   .log-badge { background: color-mix(in srgb,var(--suggester)  20%,transparent); color:var(--suggester); }
+    .log-line[data-agent="Summarizer"]  .log-badge { background: color-mix(in srgb,var(--summarizer) 20%,transparent); color:var(--summarizer); }
+    .log-line[data-agent="Orchestrator"].log-badge { background: color-mix(in srgb,#fff 10%,transparent); color:var(--muted); }
+
+    .log-line.is-tool .log-msg { color: var(--border); font-style: italic; }
+    .log-line.is-tool .log-badge { opacity: 0.5; }
+    .log-line.is-tool .log-msg::before { content: "⟳ "; color: var(--tool); }
+
+    .log-separator { border: none; border-top: 1px solid var(--border); margin: 6px 0; opacity: 0.5; }
+
+    /* ── Report ───────────────────────────────────────────── */
+    #report { display: none; }
+    .report-header {
+      display: flex; align-items: center; gap: 18px;
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 8px; padding: 18px; margin-bottom: 14px;
+    }
+    .score-badge {
+      width: 74px; height: 74px; border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 24px; font-weight: 700; flex-shrink: 0; border: 3px solid;
+    }
+    .score-badge.excellent { border-color: var(--suggester); color: var(--suggester); }
+    .score-badge.good      { border-color: var(--analyzer);  color: var(--analyzer); }
+    .score-badge.average   { border-color: var(--summarizer);color: var(--summarizer); }
+    .score-badge.poor      { border-color: var(--error);     color: var(--error); }
+    .report-meta h2 { font-size: 15px; margin-bottom: 5px; }
+    .report-meta p  { font-size: 13px; color: var(--muted); line-height: 1.5; }
+
+    .report-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 12px; }
+    .report-section {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 8px; padding: 14px;
+    }
+    .sec-title {
+      font-size: 11px; font-weight: 700; text-transform: uppercase;
+      letter-spacing: 0.5px; margin-bottom: 9px;
+    }
+    .sec-title.critical    { color: var(--error); }
+    .sec-title.improvement { color: var(--suggester); }
+    .bullet-list { list-style: none; }
+    .bullet-list li {
+      display: flex; gap: 7px; font-size: 12px;
+      color: var(--muted); margin-bottom: 5px; line-height: 1.4;
+    }
+    .bullet-list li::before { content: "•"; flex-shrink: 0; }
+    .bullet-list.critical    li::before { color: var(--error); }
+    .bullet-list.improvement li::before { color: var(--suggester); }
+
+    .issues-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+    .issues-table th {
+      text-align: left; color: var(--muted); font-weight: 600;
+      padding: 5px 8px; border-bottom: 1px solid var(--border);
+    }
+    .issues-table td {
+      padding: 5px 8px;
+      border-bottom: 1px solid color-mix(in srgb,var(--border) 40%,transparent);
+      vertical-align: top;
+    }
+    .sev { font-weight: 700; font-size: 10px; padding: 2px 5px; border-radius: 3px; }
+    .sev.critical { background: color-mix(in srgb,var(--error)      20%,transparent); color:var(--error); }
+    .sev.high     { background: color-mix(in srgb,#ff7b72           20%,transparent); color:#ff7b72; }
+    .sev.medium   { background: color-mix(in srgb,var(--summarizer)  20%,transparent); color:var(--summarizer); }
+    .sev.low      { background: color-mix(in srgb,var(--muted)       20%,transparent); color:var(--muted); }
+
+    .imp-item { margin-bottom: 12px; }
+    .imp-title { font-weight: 600; font-size: 12px; color: var(--suggester); margin-bottom: 3px; }
+    .imp-rat   { font-size: 11px; color: var(--muted); margin-bottom: 5px; }
+    .imp-snippets { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+    .snippet {
+      background: var(--bg); border-radius: 4px; padding: 7px;
+      font-family: monospace; font-size: 11px;
+      white-space: pre-wrap; overflow-x: auto;
+    }
+    .snippet.before { border-left: 2px solid var(--error);     color: #ff7b72; }
+    .snippet.after  { border-left: 2px solid var(--suggester); color: var(--suggester); }
+    .snippet-lbl    { font-size: 10px; color: var(--muted); margin-bottom: 3px; }
+
+    .struct-bar {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 8px; padding: 12px 16px;
+      display: flex; gap: 20px; align-items: center;
+    }
+    .stat { text-align: center; }
+    .stat-v { font-size: 20px; font-weight: 700; color: var(--analyzer); }
+    .stat-l { font-size: 10px; color: var(--muted); margin-top: 2px; }
+    .struct-sum { flex: 1; font-size: 12px; color: var(--muted); line-height: 1.5; }
+
+    /* ── File browser modal ───────────────────────────────── */
+    .modal-overlay {
+      display: none; position: fixed; inset: 0;
+      background: rgba(0,0,0,0.6); z-index: 100;
+      align-items: center; justify-content: center;
+    }
+    .modal-overlay.open { display: flex; }
+    .modal {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 10px; width: 560px; max-height: 80vh;
+      display: flex; flex-direction: column; overflow: hidden;
+    }
+    .modal-header {
+      background: var(--surface2); border-bottom: 1px solid var(--border);
+      padding: 12px 16px; display: flex; align-items: center; gap: 10px;
+    }
+    .modal-header h3 { font-size: 14px; font-weight: 600; flex: 1; }
+    .modal-close { background: none; border: none; color: var(--muted); font-size: 18px; cursor: pointer; }
+    .modal-close:hover { color: var(--text); }
+    .modal-path-bar {
+      padding: 8px 14px; border-bottom: 1px solid var(--border);
+      font-family: monospace; font-size: 12px; color: var(--muted);
+      background: var(--bg); display: flex; align-items: center; gap: 8px;
+    }
+    .modal-path-bar span { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .up-btn {
+      background: var(--surface2); border: 1px solid var(--border);
+      color: var(--muted); border-radius: 4px; padding: 3px 8px;
+      font-size: 11px; cursor: pointer; flex-shrink: 0;
+    }
+    .up-btn:hover { color: var(--text); }
+    .modal-body { overflow-y: auto; flex: 1; }
+    .browser-list { list-style: none; }
+    .browser-item {
+      display: flex; align-items: center; gap: 9px;
+      padding: 8px 14px; cursor: pointer;
+      border-bottom: 1px solid transparent; transition: background 0.1s;
+    }
+    .browser-item:hover { background: var(--surface2); }
+    .browser-item.selected { background: color-mix(in srgb,var(--analyzer) 15%,transparent); }
+    .bi-icon  { width: 16px; font-size: 13px; flex-shrink: 0; text-align: center; }
+    .bi-dir   { color: var(--summarizer); }
+    .bi-file  { color: var(--analyzer); }
+    .bi-name  { font-size: 13px; flex: 1; }
+    .bi-dir-name  { color: var(--text); }
+    .bi-file-name { color: var(--muted); }
+    .browser-item:hover .bi-name { color: var(--text); }
+    .modal-footer {
+      padding: 10px 14px; border-top: 1px solid var(--border);
+      display: flex; align-items: center; gap: 8px; background: var(--surface2);
+    }
+    .modal-sel-path {
+      flex: 1; font-family: monospace; font-size: 11px;
+      color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    }
+    .select-btn {
+      background: var(--analyzer); color: #000; border: none; border-radius: 5px;
+      padding: 6px 14px; font-size: 12px; font-weight: 600; cursor: pointer; flex-shrink: 0;
+    }
+    .select-btn:hover { opacity: 0.85; }
+    .empty-msg { padding: 20px 14px; color: var(--muted); font-size: 13px; text-align: center; }
+  </style>
+</head>
+<body>
+
+<header>
+  <div class="logo-icon">🤖</div>
+  <div class="logo">
+    <h1>Code Review — AutoGen</h1>
+    <p>Multi-Agent Demo &mdash; CS 5001 &bull; AutoGen v0.4 + Ollama</p>
+  </div>
+  <span class="autogen-badge">AUTOGEN</span>
+</header>
+
+<main>
+
+  <!-- What makes this different -->
+  <div class="diff-callout">
+    <strong>AutoGen agentic loop:</strong> the LLM decides when to call tools &rarr;
+    AutoGen executes them &rarr; result fed back to the LLM &rarr; repeats until done.
+    Watch the <strong>⟳ tool calls</strong> appear in real time below.
+  </div>
+
+  <!-- Input card -->
+  <div class="input-card">
+    <div class="input-row">
+      <div class="input-group">
+        <label>File or Directory Path</label>
+        <div class="path-wrapper">
+          <input id="path-input" type="text"
+                 placeholder="/absolute/path/to/file.py  or  directory/"
+                 spellcheck="false" />
+          <button class="browse-btn" onclick="openBrowser()">📁 Browse</button>
+        </div>
+      </div>
+    </div>
+    <div class="run-row">
+      <button class="run-btn" id="run-btn" onclick="startReview()">▶ Run Review</button>
+    </div>
+  </div>
+
+  <!-- Pipeline cards -->
+  <div class="pipeline">
+    <div class="agent-card" data-agent="Analyzer" id="card-Analyzer">
+      <div class="agent-header"><div class="agent-dot"></div><span class="agent-name">Analyzer</span></div>
+      <div class="agent-sub">Structural mapping</div>
+      <div class="agent-loop">LLM → tools → LLM</div>
+    </div>
+    <div class="agent-card" data-agent="Reviewer" id="card-Reviewer">
+      <div class="agent-header"><div class="agent-dot"></div><span class="agent-name">Reviewer</span></div>
+      <div class="agent-sub">Bug &amp; security scan</div>
+      <div class="agent-loop">LLM → read_file → LLM</div>
+    </div>
+    <div class="agent-card" data-agent="Suggester" id="card-Suggester">
+      <div class="agent-header"><div class="agent-dot"></div><span class="agent-name">Suggester</span></div>
+      <div class="agent-sub">Improvement proposals</div>
+      <div class="agent-loop">LLM → read_file → LLM</div>
+    </div>
+    <div class="agent-card" data-agent="Summarizer" id="card-Summarizer">
+      <div class="agent-header"><div class="agent-dot"></div><span class="agent-name">Summarizer</span></div>
+      <div class="agent-sub">Final report</div>
+      <div class="agent-loop">LLM (no tools)</div>
+    </div>
+  </div>
+
+  <!-- Error -->
+  <div id="error-msg"></div>
+
+  <!-- Log terminal -->
+  <div class="log-section">
+    <div class="log-titlebar">
+      <div class="log-dots"><span></span><span></span><span></span></div>
+      <span class="log-title">Pipeline Log — AutoGen Agentic Loop</span>
+      <span class="log-note">⟳ = LLM-requested tool call executed by AutoGen</span>
+    </div>
+    <div id="log"><span style="color:#30363d;font-size:11px;font-family:monospace;">Waiting for pipeline to start…</span></div>
+  </div>
+
+  <!-- Report -->
+  <div id="report"></div>
+
+</main>
+
+<!-- File browser modal -->
+<div class="modal-overlay" id="browser-overlay" onclick="handleOverlayClick(event)">
+  <div class="modal">
+    <div class="modal-header">
+      <h3>Select File or Folder</h3>
+      <button class="modal-close" onclick="closeBrowser()">×</button>
+    </div>
+    <div class="modal-path-bar">
+      <button class="up-btn" onclick="navigateUp()">↑ Up</button>
+      <span id="browser-path">/</span>
+    </div>
+    <div class="modal-body">
+      <ul class="browser-list" id="browser-list"></ul>
+    </div>
+    <div class="modal-footer">
+      <div class="modal-sel-path" id="modal-sel-path">No selection</div>
+      <button class="select-btn" onclick="confirmSelection()">Select</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ── State ─────────────────────────────────────────────────────
+let activeSource = null;
+let browserCurrentPath = "";
+let browserSelectedPath = "";
+
+const AGENTS = ["Analyzer", "Reviewer", "Suggester", "Summarizer"];
+
+// ── Pipeline cards ────────────────────────────────────────────
+function resetCards() {
+  AGENTS.forEach(a => document.getElementById("card-" + a).classList.remove("running", "done"));
+}
+function setAgentRunning(agent) {
+  const c = document.getElementById("card-" + agent);
+  if (c) { c.classList.remove("done"); c.classList.add("running"); }
+}
+function setAgentDone(agent) {
+  const c = document.getElementById("card-" + agent);
+  if (c) { c.classList.remove("running"); c.classList.add("done"); }
+}
+
+// ── Log terminal ──────────────────────────────────────────────
+let logLastAgent = null;
+
+function clearLog() {
+  logLastAgent = null;
+  document.getElementById("log").innerHTML =
+    '<span style="color:#30363d;font-size:11px;font-family:monospace;">Running pipeline…</span>';
+}
+
+function appendLog(agent, message, isTool) {
+  const log = document.getElementById("log");
+  if (log.querySelector("span:only-child")) log.innerHTML = "";
+
+  if (agent !== logLastAgent && AGENTS.includes(agent)) {
+    if (logLastAgent !== null) {
+      const sep = document.createElement("hr");
+      sep.className = "log-separator";
+      log.appendChild(sep);
+    }
+    logLastAgent = agent;
+  }
+
+  const ts = new Date().toTimeString().slice(0, 8);
+  const displayMsg = isTool ? message.replace(/^\[tool\]\s*/, "") : message;
+
+  const line = document.createElement("div");
+  line.className = "log-line" + (isTool ? " is-tool" : "");
+  line.dataset.agent = agent;
+  line.innerHTML =
+    `<span class="log-ts">${ts}</span>` +
+    `<span class="log-badge">${escHtml(agent)}</span>` +
+    `<span class="log-msg">${escHtml(displayMsg)}</span>`;
+
+  log.appendChild(line);
+  log.scrollTop = log.scrollHeight;
+}
+
+// ── Main review flow ──────────────────────────────────────────
+async function startReview() {
+  const path = document.getElementById("path-input").value.trim();
+  if (!path) { alert("Please enter a file or directory path."); return; }
+
+  resetCards();
+  clearLog();
+  document.getElementById("report").style.display = "none";
+  document.getElementById("report").innerHTML = "";
+  document.getElementById("error-msg").style.display = "none";
+  document.getElementById("run-btn").disabled = true;
+
+  if (activeSource) { activeSource.close(); activeSource = null; }
+
+  let jobId;
+  try {
+    const res = await fetch("/api/review", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ path }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || "Server error");
+    jobId = data.job_id;
+  } catch (err) {
+    showError("Failed to start review: " + err.message);
+    document.getElementById("run-btn").disabled = false;
+    return;
+  }
+
+  activeSource = new EventSource("/api/stream/" + jobId);
+  activeSource.onmessage = function(e) {
+    const ev = JSON.parse(e.data);
+    if (ev.type === "agent_start") {
+      setAgentRunning(ev.agent);
+    } else if (ev.type === "log") {
+      appendLog(ev.agent, ev.message, ev.is_tool || false);
+    } else if (ev.type === "agent_done") {
+      setAgentDone(ev.agent);
+    } else if (ev.type === "done") {
+      AGENTS.forEach(setAgentDone);
+      activeSource.close(); activeSource = null;
+      document.getElementById("run-btn").disabled = false;
+      appendLog("Orchestrator", "Pipeline complete.", false);
+      renderReport(ev.report);
+    } else if (ev.type === "error") {
+      activeSource.close(); activeSource = null;
+      document.getElementById("run-btn").disabled = false;
+      showError(ev.message);
+    }
+  };
+  activeSource.onerror = function() {
+    if (activeSource) { activeSource.close(); activeSource = null; }
+    document.getElementById("run-btn").disabled = false;
+  };
+}
+
+// ── Error ─────────────────────────────────────────────────────
+function showError(msg) {
+  const el = document.getElementById("error-msg");
+  el.textContent = "Error: " + msg;
+  el.style.display = "block";
+}
+
+// ── Report renderer ───────────────────────────────────────────
+function renderReport(r) {
+  const score = r.overall_score;
+  const cls = score >= 90 ? "excellent" : score >= 75 ? "good" : score >= 50 ? "average" : "poor";
+
+  let issuesHtml = "";
+  if (r.review?.issues?.length) {
+    const rows = r.review.issues.map(i => `
+      <tr>
+        <td><span class="sev ${i.severity}">${escHtml(i.severity)}</span></td>
+        <td>${escHtml(i.category)}</td>
+        <td style="font-family:monospace;font-size:11px">${escHtml(i.location)}</td>
+        <td>${escHtml(i.description)}</td>
+      </tr>`).join("");
+    issuesHtml = `
+      <div class="report-section" style="grid-column:1/-1">
+        <div class="sec-title critical">Issues (${r.review.issues.length})</div>
+        <table class="issues-table">
+          <thead><tr><th>Severity</th><th>Category</th><th>Location</th><th>Description</th></tr></thead>
+          <tbody>${rows}</tbody>
+        </table>
+      </div>`;
+  }
+
+  let impHtml = "";
+  if (r.suggestions?.improvements?.length) {
+    const items = r.suggestions.improvements
+      .sort((a, b) => a.priority - b.priority)
+      .map(i => `
+        <div class="imp-item">
+          <div class="imp-title">#${i.priority}  ${escHtml(i.title)}</div>
+          <div class="imp-rat">${escHtml(i.rationale)}</div>
+          ${(i.before || i.after) ? `
+          <div class="imp-snippets">
+            ${i.before ? `<div><div class="snippet-lbl">Before</div><div class="snippet before">${escHtml(i.before)}</div></div>` : ""}
+            ${i.after  ? `<div><div class="snippet-lbl">After</div><div class="snippet after">${escHtml(i.after)}</div></div>` : ""}
+          </div>` : ""}
+        </div>`).join("");
+    const qw = (r.suggestions.quick_wins || []).map(w => `<li>${escHtml(w)}</li>`).join("");
+    impHtml = `
+      <div class="report-section" style="grid-column:1/-1">
+        <div class="sec-title improvement">Suggested Improvements</div>
+        ${items}
+        ${qw ? `<div style="margin-top:10px"><div class="sec-title" style="color:var(--muted);margin-bottom:6px">Quick Wins</div><ul class="bullet-list improvement">${qw}</ul></div>` : ""}
+      </div>`;
+  }
+
+  const a = r.analysis || {};
+  const structHtml = `
+    <div class="struct-bar" style="margin-top:12px">
+      <div class="stat"><div class="stat-v">${a.loc_total || 0}</div><div class="stat-l">Lines</div></div>
+      <div class="stat"><div class="stat-v">${(a.files_analyzed || []).length}</div><div class="stat-l">Files</div></div>
+      <div class="stat"><div class="stat-v">${(a.functions || []).length}</div><div class="stat-l">Functions</div></div>
+      <div class="stat"><div class="stat-v">${(a.classes || []).length}</div><div class="stat-l">Classes</div></div>
+      <div class="struct-sum">${escHtml(a.summary || "")}</div>
+    </div>`;
+
+  const el = document.getElementById("report");
+  el.style.display = "block";
+  el.innerHTML = `
+    <div class="report-header">
+      <div class="score-badge ${cls}">${score}</div>
+      <div class="report-meta">
+        <h2>Review Complete</h2>
+        <p>${escHtml(r.executive_summary || "")}</p>
+      </div>
+    </div>
+    <div class="report-grid">
+      <div class="report-section">
+        <div class="sec-title critical">Critical Findings</div>
+        <ul class="bullet-list critical">
+          ${(r.critical_findings || []).map(f => `<li>${escHtml(f)}</li>`).join("") || `<li style="color:var(--muted)">None.</li>`}
+        </ul>
+      </div>
+      <div class="report-section">
+        <div class="sec-title improvement">Top Improvements</div>
+        <ul class="bullet-list improvement">
+          ${(r.top_improvements || []).map(f => `<li>${escHtml(f)}</li>`).join("") || `<li style="color:var(--muted)">None suggested.</li>`}
+        </ul>
+      </div>
+      ${issuesHtml}
+      ${impHtml}
+    </div>
+    ${structHtml}`;
+  el.scrollIntoView({ behavior: "smooth" });
+}
+
+// ── File browser ──────────────────────────────────────────────
+async function openBrowser() {
+  browserSelectedPath = "";
+  document.getElementById("modal-sel-path").textContent = "No selection";
+  document.getElementById("browser-overlay").classList.add("open");
+  await navigateTo(document.getElementById("path-input").value.trim() || "~");
+}
+
+function closeBrowser() {
+  document.getElementById("browser-overlay").classList.remove("open");
+}
+
+function handleOverlayClick(e) {
+  if (e.target === document.getElementById("browser-overlay")) closeBrowser();
+}
+
+async function navigateTo(path) {
+  try {
+    const res = await fetch("/api/browse?path=" + encodeURIComponent(path));
+    const data = await res.json();
+    if (data.error) { alert(data.error); return; }
+
+    browserCurrentPath = data.path;
+    document.getElementById("browser-path").textContent = data.path;
+
+    const list = document.getElementById("browser-list");
+    list.innerHTML = "";
+
+    if (!data.entries.length) {
+      list.innerHTML = '<div class="empty-msg">No source files in this directory.</div>';
+      return;
+    }
+
+    const dirs  = data.entries.filter(e => e.type === "dir");
+    const files = data.entries.filter(e => e.type === "file");
+
+    for (const entry of [...dirs, ...files]) {
+      const li = document.createElement("li");
+      li.className = "browser-item";
+      const isDir = entry.type === "dir";
+      li.innerHTML = `
+        <span class="bi-icon ${isDir ? "bi-dir" : "bi-file"}">${isDir ? "📁" : "📄"}</span>
+        <span class="bi-name ${isDir ? "bi-dir-name" : "bi-file-name"}">${escHtml(entry.name)}</span>`;
+
+      if (isDir) {
+        li.addEventListener("click", () => selectBrowserItem(li, entry.path));
+        li.addEventListener("dblclick", e => { e.preventDefault(); navigateTo(entry.path); });
+      } else {
+        li.addEventListener("click", () => selectBrowserItem(li, entry.path));
+        li.addEventListener("dblclick", () => confirmSelection(entry.path));
+      }
+      list.appendChild(li);
+    }
+
+    // "Select this folder" row
+    const folderLi = document.createElement("li");
+    folderLi.className = "browser-item";
+    folderLi.style.borderTop = "1px solid var(--border)";
+    folderLi.style.marginTop = "4px";
+    folderLi.innerHTML = `<span class="bi-icon">📂</span><span class="bi-name" style="color:var(--analyzer)">Select this folder</span>`;
+    folderLi.addEventListener("click", () => confirmSelection(browserCurrentPath));
+    list.appendChild(folderLi);
+
+  } catch (err) {
+    alert("Browse error: " + err.message);
+  }
+}
+
+function selectBrowserItem(li, path) {
+  document.querySelectorAll(".browser-item.selected").forEach(el => el.classList.remove("selected"));
+  li.classList.add("selected");
+  browserSelectedPath = path;
+  document.getElementById("modal-sel-path").textContent = path;
+}
+
+async function navigateUp() {
+  const res = await fetch("/api/browse?path=" + encodeURIComponent(browserCurrentPath));
+  const data = await res.json();
+  if (data.parent) navigateTo(data.parent);
+}
+
+function confirmSelection(path) {
+  const chosen = path || browserSelectedPath;
+  if (!chosen) { alert("Click a file or folder first."); return; }
+  document.getElementById("path-input").value = chosen;
+  closeBrowser();
+}
+
+// ── Utility ───────────────────────────────────────────────────
+function escHtml(s) {
+  return String(s)
+    .replace(/&/g, "&amp;").replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+}
+
+document.getElementById("path-input").addEventListener("keydown", e => {
+  if (e.key === "Enter") startReview();
+});
+</script>
+</body>
+</html>
