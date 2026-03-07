@@ -1,13 +1,12 @@
 """Reporter for formatting and displaying review results."""
 
-from typing import List, Dict, Optional
+from typing import List
 from enum import Enum
-import sys
 
 from .git_utils import DiffResult
-from .analyzer import Issue, IssueSeverity, IssueType, CodeAnalyzer
-from .categorizer import ChangeCategory, ChangeCategorizer
-from .risk_assessor import RiskLevel, RiskAssessor
+from .analyzer import Issue, IssueSeverity, IssueType
+from .categorizer import ChangeCategory
+from .risk_assessor import RiskLevel
 
 
 # ANSI color codes

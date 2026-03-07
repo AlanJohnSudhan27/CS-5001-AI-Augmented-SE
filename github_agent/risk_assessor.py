@@ -5,8 +5,8 @@ from enum import Enum
 from dataclasses import dataclass
 
 from .git_utils import DiffResult
-from .analyzer import CodeAnalyzer, Issue, IssueSeverity, IssueType
-from .categorizer import ChangeCategory, ChangeCategorizer
+from .analyzer import Issue, IssueSeverity, IssueType
+from .categorizer import ChangeCategory
 
 
 class RiskLevel(Enum):

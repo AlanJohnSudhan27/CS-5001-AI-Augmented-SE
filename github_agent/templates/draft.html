@@ -1,0 +1,137 @@
+{% extends "base.html" %}
+{% block title %}Draft Issue / PR — GitHub Review Agent{% endblock %}
+{% block content %}
+<div class="page">
+
+  <div class="card" style="margin-bottom:1rem;">
+    <div class="card-header">
+      <h1>Draft Issue / PR</h1>
+      <p>Pipeline: Reviewer &rarr; Planner &rarr; Writer &rarr; Critic &rarr; Gatekeeper (you)</p>
+    </div>
+    <div class="card-body">
+
+      <!-- Source tabs -->
+      <div class="tab-bar">
+        <button class="tab-btn {% if not report_id %}active{% endif %}" onclick="switchTab(this,'instruction-panel')">
+          From Explicit Instruction
+        </button>
+        <button class="tab-btn {% if report_id %}active{% endif %}" onclick="switchTab(this,'review-panel')">
+          From Code Review
+        </button>
+      </div>
+
+      <form action="{{ url_for('draft_run') }}" method="post">
+
+        <!-- Instruction panel -->
+        <div class="tab-panel {% if not report_id %}active{% endif %}" id="instruction-panel">
+          <input type="hidden" name="draft_source" value="instruction" id="src_instruction">
+          <div class="form-group">
+            <label for="instruction">Instruction</label>
+            <textarea id="instruction" name="instruction" rows="4"
+                      placeholder="e.g. Create an issue for missing input validation in the login API."></textarea>
+            <p class="field-hint">Describe what to draft. The Writer Agent will produce structured content; the Critic will review it.</p>
+          </div>
+        </div>
+
+        <!-- Review panel -->
+        <div class="tab-panel {% if report_id %}active{% endif %}" id="review-panel">
+          <input type="hidden" name="report_id" value="{{ report_id or '' }}" id="src_report_id">
+          <div class="form-group">
+            <label for="repo">Repository <span class="hint">— local path or GitHub URL</span></label>
+            <input type="text" id="repo" name="repo" value="{{ report.repo or '.' }}" placeholder=".">
+          </div>
+          <div class="input-row" style="margin-bottom:1.25rem;">
+            <div>
+              <label for="from_commit">From Commit</label>
+              <input type="text" id="from_commit" name="from_commit" class="mono"
+                     value="{{ report.from_commit or '' }}" placeholder="abc123">
+            </div>
+            <div>
+              <label for="to_commit">To Commit <span class="hint">— optional</span></label>
+              <input type="text" id="to_commit" name="to_commit" class="mono"
+                     value="{{ report.to_commit or '' }}" placeholder="def456">
+            </div>
+          </div>
+          <div class="form-group">
+            <label for="instruction2">Additional Instruction <span class="hint">— optional</span></label>
+            <input type="text" id="instruction2" name="instruction"
+                   placeholder="e.g. Focus on the authentication module">
+          </div>
+        </div>
+
+        <hr class="section-divider">
+
+        <!-- Artifact type -->
+        <div class="form-group">
+          <label>Artifact Type</label>
+          <div class="toggle-group" style="max-width:280px;">
+            <input type="radio" name="artifact_type" id="type-issue" value="issue"
+                   {% if suggested_action != 'create_pr' %}checked{% endif %}>
+            <label for="type-issue">Issue</label>
+            <input type="radio" name="artifact_type" id="type-pr" value="pr"
+                   {% if suggested_action == 'create_pr' %}checked{% endif %}>
+            <label for="type-pr">Pull Request</label>
+          </div>
+        </div>
+
+        <!-- GitHub settings -->
+        <div class="form-group">
+          <label for="github_repo_input">GitHub Repository <span class="hint">— URL or owner/repo, needed to create on GitHub</span></label>
+          <input type="text" id="github_repo_input" name="github_repo_input"
+                 value="{{ report.github_repo_input or '' }}"
+                 placeholder="https://github.com/owner/repo  or  owner/repo">
+        </div>
+
+        <div class="form-group">
+          <label for="github_token">GitHub Token <span class="hint">— needed to create on GitHub</span></label>
+          <input type="password" id="github_token" name="github_token" placeholder="ghp_...">
+        </div>
+
+        <div class="form-group" id="head-branch-group" style="display:none;">
+          <label for="head_branch">Head Branch <span class="hint">— required for PR</span></label>
+          <input type="text" id="head_branch" name="head_branch" class="mono"
+                 placeholder="feature/my-branch">
+        </div>
+
+        <button type="submit" class="btn btn-primary btn-full btn-lg">
+          Run Multi-Agent Pipeline &rarr;
+        </button>
+      </form>
+    </div>
+  </div>
+
+  <!-- Pipeline info -->
+  <div class="card">
+    <div class="card-body" style="font-size:0.825rem;color:#64748b;line-height:1.6;">
+      <strong style="color:#374151;">Pipeline architecture:</strong>
+      <span class="badge badge-gray">Reviewer</span> analyzes code (Tool Use) &rarr;
+      <span class="badge badge-blue">Planner</span> creates structured plan &rarr;
+      <span class="badge badge-blue">Writer</span> drafts content &rarr;
+      <span class="badge badge-gray">Critic</span> reflects on quality &rarr;
+      <span class="badge badge-gray">Gatekeeper</span> requires your approval before any GitHub action.
+    </div>
+  </div>
+
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+function switchTab(btn, panelId) {
+  document.querySelectorAll('.tab-btn').forEach(function(b) { b.classList.remove('active'); });
+  document.querySelectorAll('.tab-panel').forEach(function(p) { p.classList.remove('active'); });
+  btn.classList.add('active');
+  document.getElementById(panelId).classList.add('active');
+}
+
+// Show/hide head-branch field
+document.querySelectorAll('[name="artifact_type"]').forEach(function(el) {
+  el.addEventListener('change', function() {
+    document.getElementById('head-branch-group').style.display = this.value === 'pr' ? '' : 'none';
+  });
+});
+
+{% if suggested_action == 'create_pr' %}
+document.getElementById('head-branch-group').style.display = '';
+{% endif %}
+</script>
+{% endblock %}
