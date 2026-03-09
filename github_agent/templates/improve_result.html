@@ -1,0 +1,208 @@
+{% extends "base.html" %}
+{% block title %}Improvement Result — GitHub Review Agent{% endblock %}
+{% block content %}
+<div class="page wide">
+
+  <div class="card" style="margin-bottom:1rem;">
+    <div class="card-body" style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:0.75rem;">
+      <div>
+        <div style="font-size:1.1rem;font-weight:700;color:#0f172a;margin-bottom:0.2rem;">Improvement Analysis</div>
+        <div style="font-size:0.85rem;color:#64748b;">Reviewer critique &rarr; Writer proposed improvement &rarr; Post as comment if you approve.</div>
+      </div>
+      <span class="badge badge-blue">{{ data.content_type | title }} #{{ data.original.number }}</span>
+    </div>
+  </div>
+
+  <div class="three-col" style="margin-bottom:1rem;align-items:start;">
+
+    <!-- Original -->
+    <div class="card">
+      <div class="card-header">
+        <h2>Original {{ data.content_type | title }}</h2>
+      </div>
+      <div class="card-body">
+        <div class="draft-title">{{ data.original.title }}</div>
+
+        {% if data.original.state %}
+        <span class="badge {% if data.original.state == 'open' %}badge-low{% else %}badge-gray{% endif %}" style="margin-bottom:0.75rem;">
+          {{ data.original.state }}
+        </span>
+        {% endif %}
+
+        {% if data.original.labels %}
+        <div style="margin-bottom:0.75rem;">
+          {% for lbl in data.original.labels %}
+          <span class="badge badge-gray" style="margin-right:0.3rem;">{{ lbl.name }}</span>
+          {% endfor %}
+        </div>
+        {% endif %}
+
+        <div style="font-size:0.85rem;color:#374151;line-height:1.6;white-space:pre-wrap;word-break:break-word;max-height:460px;overflow-y:auto;border-top:1px solid #f1f5f9;padding-top:0.75rem;">
+          {{ (data.original.body or "(no body)") | truncate(2000) }}
+        </div>
+      </div>
+    </div>
+
+    <!-- Critique (Reviewer Agent) -->
+    <div class="card">
+      <div class="card-header" style="background:#fefce8;border-bottom-color:#fde68a;">
+        <h2 style="color:#92400e;">Reviewer Agent — Critique</h2>
+      </div>
+      <div class="card-body">
+        {% set crit = data.critique %}
+
+        {% if crit.overall_assessment %}
+        <div class="critique-item" style="margin-bottom:0.75rem;{% if crit.severity == 'major' %}border-color:#fecaca;background:#fef2f2;{% elif crit.severity == 'moderate' %}border-color:#fde68a;background:#fefce8;{% endif %}">
+          <div class="critique-item-title">Assessment</div>
+          <div style="font-size:0.875rem;color:#374151;">{{ crit.overall_assessment }}</div>
+          {% if crit.severity %}
+          <span class="badge {% if crit.severity == 'major' %}badge-high{% elif crit.severity == 'moderate' %}badge-medium{% else %}badge-low{% endif %}" style="margin-top:0.4rem;">
+            {{ crit.severity }}
+          </span>
+          {% endif %}
+        </div>
+        {% endif %}
+
+        <div class="critique-panel">
+          {% if crit.vague_language %}
+          <div class="critique-item">
+            <div class="critique-item-title" style="color:#d97706;">Vague Language</div>
+            <ul>{% for v in crit.vague_language %}<li>{{ v }}</li>{% endfor %}</ul>
+          </div>
+          {% endif %}
+
+          {% if crit.missing_information %}
+          <div class="critique-item">
+            <div class="critique-item-title" style="color:#dc2626;">Missing Information</div>
+            <ul>{% for m in crit.missing_information %}<li>{{ m }}</li>{% endfor %}</ul>
+          </div>
+          {% endif %}
+
+          {% if crit.unclear_criteria %}
+          <div class="critique-item">
+            <div class="critique-item-title" style="color:#d97706;">Unclear Criteria</div>
+            <ul>{% for u in crit.unclear_criteria %}<li>{{ u }}</li>{% endfor %}</ul>
+          </div>
+          {% endif %}
+
+          {% if crit.missing_evidence %}
+          <div class="critique-item">
+            <div class="critique-item-title" style="color:#d97706;">Missing Evidence</div>
+            <ul>{% for e in crit.missing_evidence %}<li>{{ e }}</li>{% endfor %}</ul>
+          </div>
+          {% endif %}
+
+          {% if crit.structural_problems %}
+          <div class="critique-item">
+            <div class="critique-item-title" style="color:#dc2626;">Structural Problems</div>
+            <ul>{% for p in crit.structural_problems %}<li>{{ p }}</li>{% endfor %}</ul>
+          </div>
+          {% endif %}
+
+          {% if not crit.vague_language and not crit.missing_information and not crit.unclear_criteria and not crit.missing_evidence and not crit.structural_problems %}
+          <div class="critique-item">
+            <div style="font-size:0.875rem;color:#64748b;">No major issues identified.</div>
+          </div>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+
+    <!-- Improved version (Writer Agent) -->
+    <div class="card">
+      <div class="card-header" style="background:#f0fdf4;border-bottom-color:#bbf7d0;">
+        <h2 style="color:#15803d;">Writer Agent — Proposed Improvement</h2>
+      </div>
+      <div class="card-body">
+        {% set imp = data.improved %}
+
+        {% if imp.raw %}
+          <div style="font-size:0.875rem;color:#374151;line-height:1.6;white-space:pre-wrap;word-break:break-word;">{{ imp.raw }}</div>
+        {% else %}
+          {% if imp.title %}
+          <div class="draft-title">{{ imp.title }}</div>
+          {% endif %}
+
+          {% if data.content_type == 'issue' %}
+            {% if imp.problem_description %}
+            <div class="draft-section">
+              <div class="draft-section-title">Problem</div>
+              <div class="draft-body">{{ imp.problem_description }}</div>
+            </div>
+            {% endif %}
+            {% if imp.evidence %}
+            <div class="draft-section">
+              <div class="draft-section-title">Evidence</div>
+              <div class="draft-body">{{ imp.evidence }}</div>
+            </div>
+            {% endif %}
+            {% if imp.acceptance_criteria %}
+            <div class="draft-section">
+              <div class="draft-section-title">Acceptance Criteria</div>
+              <ul class="criteria-list">
+                {% for ac in imp.acceptance_criteria %}<li>{{ ac }}</li>{% endfor %}
+              </ul>
+            </div>
+            {% endif %}
+          {% else %}
+            {% if imp.summary %}
+            <div class="draft-section">
+              <div class="draft-section-title">Summary</div>
+              <div class="draft-body">{{ imp.summary }}</div>
+            </div>
+            {% endif %}
+            {% if imp.files_affected %}
+            <div class="draft-section">
+              <div class="draft-section-title">Files Affected</div>
+              <ul class="file-list">
+                {% for f in imp.files_affected %}<li><span class="file-path">{{ f }}</span></li>{% endfor %}
+              </ul>
+            </div>
+            {% endif %}
+            {% if imp.behavior_change %}
+            <div class="draft-section">
+              <div class="draft-section-title">Behavior Change</div>
+              <div class="draft-body">{{ imp.behavior_change }}</div>
+            </div>
+            {% endif %}
+            {% if imp.test_plan %}
+            <div class="draft-section">
+              <div class="draft-section-title">Test Plan</div>
+              <div class="draft-body">{{ imp.test_plan }}</div>
+            </div>
+            {% endif %}
+          {% endif %}
+
+          {% if imp.risk_level %}
+          <span class="badge badge-{{ imp.risk_level }}">Risk: {{ imp.risk_level | upper }}</span>
+          {% endif %}
+        {% endif %}
+      </div>
+    </div>
+
+  </div>
+
+  <!-- Action buttons -->
+  <div class="card">
+    <div class="card-body">
+      <div style="font-size:1rem;font-weight:700;margin-bottom:0.35rem;">Post Improvement as Comment?</div>
+      <p style="font-size:0.85rem;color:#64748b;margin-bottom:1.25rem;">
+        This will add the improved version as a suggestion comment on the original {{ data.content_type }}.
+        The original will not be modified.
+      </p>
+      <div style="display:flex;gap:0.75rem;flex-wrap:wrap;">
+        <form action="{{ url_for('improve_post') }}" method="post">
+          <input type="hidden" name="improve_id" value="{{ improve_id }}">
+          <button type="submit" class="btn btn-success">
+            Post as GitHub Comment
+          </button>
+        </form>
+        <a href="{{ url_for('improve_form') }}" class="btn btn-ghost">
+          Discard — Back to Improve Form
+        </a>
+      </div>
+    </div>
+  </div>
+
+</div>
+{% endblock %}

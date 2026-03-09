@@ -1,0 +1,61 @@
+{% extends "base.html" %}
+{% block title %}Improve Issue / PR — GitHub Review Agent{% endblock %}
+{% block content %}
+<div class="page">
+
+  <div class="card" style="margin-bottom:1rem;">
+    <div class="card-header">
+      <h1>Improve Existing Issue / PR</h1>
+      <p>Fetch from GitHub &rarr; Reviewer critiques &rarr; Writer proposes improvement &rarr; You approve.</p>
+    </div>
+    <div class="card-body">
+      <form action="{{ url_for('improve_run') }}" method="post">
+
+        <div class="form-group">
+          <label for="github_repo_input">Repository <span class="hint">— GitHub URL or owner/repo</span></label>
+          <input type="text" id="github_repo_input" name="github_repo_input"
+                 placeholder="https://github.com/owner/repo  or  owner/repo" required>
+        </div>
+
+        <div class="form-group">
+          <label for="github_token">GitHub Token</label>
+          <input type="password" id="github_token" name="github_token" placeholder="ghp_..." required>
+        </div>
+
+        <hr class="section-divider">
+
+        <div class="input-row" style="margin-bottom:1.25rem;">
+          <div>
+            <label>Content Type</label>
+            <div class="toggle-group">
+              <input type="radio" name="content_type" id="ct-issue" value="issue" checked>
+              <label for="ct-issue">Issue</label>
+              <input type="radio" name="content_type" id="ct-pr" value="pr">
+              <label for="ct-pr">Pull Request</label>
+            </div>
+          </div>
+          <div>
+            <label for="item_num">Number</label>
+            <input type="number" id="item_num" name="item_num" min="1" placeholder="42" required>
+          </div>
+        </div>
+
+        <button type="submit" class="btn btn-primary btn-full btn-lg">
+          Fetch &amp; Analyze &rarr;
+        </button>
+      </form>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-body" style="font-size:0.825rem;color:#64748b;line-height:1.6;">
+      <strong style="color:#374151;">How it works:</strong>
+      The agent fetches the existing issue or PR from GitHub.
+      The <span class="badge badge-gray">Reviewer</span> critiques it for vague language, missing evidence, and unclear acceptance criteria.
+      The <span class="badge badge-blue">Writer</span> proposes a structured improved version.
+      You can then post the improvement as a comment on the original.
+    </div>
+  </div>
+
+</div>
+{% endblock %}

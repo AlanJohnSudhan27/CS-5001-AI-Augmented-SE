@@ -1,0 +1,229 @@
+{% extends "base.html" %}
+{% block title %}Review &amp; Approve Draft — GitHub Review Agent{% endblock %}
+{% block content %}
+<div class="page wide">
+
+  <!-- Header -->
+  <div class="card" style="margin-bottom:1rem;">
+    <div class="card-body" style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:0.75rem;">
+      <div>
+        <div style="font-size:1.1rem;font-weight:700;color:#0f172a;margin-bottom:0.2rem;">Gatekeeper — Human Approval Required</div>
+        <div style="font-size:0.85rem;color:#64748b;">Review the draft and reflection before anything is created on GitHub.</div>
+      </div>
+      <span class="badge badge-blue" style="font-size:0.85rem;padding:0.35rem 0.9rem;">
+        {{ data.draft_type | upper }}
+      </span>
+    </div>
+  </div>
+
+  <div class="two-col" style="align-items:start;margin-bottom:1rem;">
+
+    <!-- Left: Draft -->
+    <div>
+      {% set d = data.draft %}
+      <div class="card" style="margin-bottom:1rem;">
+        <div class="card-header">
+          <h2>Writer Agent — {% if data.draft_type == 'issue' %}Issue Draft{% else %}PR Description Draft{% endif %}</h2>
+        </div>
+        <div class="card-body">
+
+          <div class="draft-section">
+            <div class="draft-title">{{ d.title }}</div>
+          </div>
+
+          {% if data.draft_type == 'issue' %}
+            <div class="draft-section">
+              <div class="draft-section-title">Problem Description</div>
+              <div class="draft-body">{{ d.problem_description }}</div>
+            </div>
+
+            <div class="draft-section">
+              <div class="draft-section-title">Evidence</div>
+              <div class="draft-body">{{ d.evidence }}</div>
+            </div>
+
+            {% if d.acceptance_criteria %}
+            <div class="draft-section">
+              <div class="draft-section-title">Acceptance Criteria</div>
+              <ul class="criteria-list">
+                {% for ac in d.acceptance_criteria %}
+                <li>{{ ac }}</li>
+                {% endfor %}
+              </ul>
+            </div>
+            {% endif %}
+
+            {% if d.labels %}
+            <div class="draft-section">
+              <div class="draft-section-title">Labels</div>
+              {% for lbl in d.labels %}
+              <span class="badge badge-gray" style="margin-right:0.3rem;">{{ lbl }}</span>
+              {% endfor %}
+            </div>
+            {% endif %}
+
+          {% else %}
+            <div class="draft-section">
+              <div class="draft-section-title">Summary</div>
+              <div class="draft-body">{{ d.summary }}</div>
+            </div>
+
+            {% if d.files_affected %}
+            <div class="draft-section">
+              <div class="draft-section-title">Files Affected</div>
+              <ul class="file-list">
+                {% for f in d.files_affected %}
+                <li><span class="file-path">{{ f }}</span></li>
+                {% endfor %}
+              </ul>
+            </div>
+            {% endif %}
+
+            <div class="draft-section">
+              <div class="draft-section-title">Behavior Change</div>
+              <div class="draft-body">{{ d.behavior_change }}</div>
+            </div>
+
+            <div class="draft-section">
+              <div class="draft-section-title">Test Plan</div>
+              <div class="draft-body">{{ d.test_plan }}</div>
+            </div>
+          {% endif %}
+
+          {% if d.risk_level %}
+          <span class="badge badge-{{ d.risk_level }}">Risk: {{ d.risk_level | upper }}</span>
+          {% endif %}
+
+        </div>
+      </div>
+    </div>
+
+    <!-- Right: Reflection + Reviewer Summary -->
+    <div>
+
+      <!-- Reflection artifact (Critic Agent) -->
+      {% set ref = data.reflection %}
+      <div class="card" style="margin-bottom:1rem;">
+        <div class="card-header" style="background:{% if ref.passed %}#f0fdf4{% else %}#fef2f2{% endif %};border-bottom-color:{% if ref.passed %}#bbf7d0{% else %}#fecaca{% endif %};">
+          <h2 style="color:{% if ref.passed %}#15803d{% else %}#991b1b{% endif %};">
+            Critic Agent — Reflection
+            <span class="badge {% if ref.passed %}badge-low{% else %}badge-high{% endif %}" style="margin-left:0.5rem;font-size:0.7rem;">
+              {% if ref.passed %}PASSED{% else %}FAILED{% endif %}
+            </span>
+          </h2>
+        </div>
+        <div class="card-body">
+          <div class="critique-panel">
+
+            <div class="critique-item">
+              <div class="critique-item-title">Overall Quality</div>
+              <span class="badge {% if ref.overall_quality == 'good' %}badge-low{% elif ref.overall_quality == 'needs_improvement' %}badge-medium{% else %}badge-high{% endif %}">
+                {{ ref.overall_quality | replace('_', ' ') | title if ref.overall_quality else '—' }}
+              </span>
+            </div>
+
+            {% if ref.unsupported_claims %}
+            <div class="critique-item">
+              <div class="critique-item-title" style="color:#dc2626;">Unsupported Claims</div>
+              <ul>{% for c in ref.unsupported_claims %}<li>{{ c }}</li>{% endfor %}</ul>
+            </div>
+            {% endif %}
+
+            {% if ref.missing_evidence %}
+            <div class="critique-item">
+              <div class="critique-item-title" style="color:#d97706;">Missing Evidence</div>
+              <ul>{% for e in ref.missing_evidence %}<li>{{ e }}</li>{% endfor %}</ul>
+            </div>
+            {% endif %}
+
+            {% if ref.missing_tests %}
+            <div class="critique-item">
+              <div class="critique-item-title" style="color:#d97706;">Missing Tests</div>
+              <ul>{% for t in ref.missing_tests %}<li>{{ t }}</li>{% endfor %}</ul>
+            </div>
+            {% endif %}
+
+            {% if ref.policy_violations %}
+            <div class="critique-item">
+              <div class="critique-item-title" style="color:#dc2626;">Policy Violations</div>
+              <ul>{% for v in ref.policy_violations %}<li>{{ v }}</li>{% endfor %}</ul>
+            </div>
+            {% endif %}
+
+            {% if ref.suggestions %}
+            <div class="critique-item">
+              <div class="critique-item-title" style="color:#2563eb;">Suggestions</div>
+              <ul>{% for s in ref.suggestions %}<li>{{ s }}</li>{% endfor %}</ul>
+            </div>
+            {% endif %}
+
+          </div>
+        </div>
+      </div>
+
+      <!-- Reviewer summary -->
+      {% set rs = data.reviewer_summary %}
+      <div class="card">
+        <div class="card-header">
+          <h2>Reviewer Agent — Code Analysis</h2>
+        </div>
+        <div class="card-body">
+          <div class="stats-row" style="padding:0 0 1rem;">
+            <div class="stat">
+              <span class="stat-value">{{ rs.files_changed or 0 }}</span>
+              <span class="stat-label">files changed</span>
+            </div>
+            <div class="stat">
+              <span class="stat-value">{{ rs.issues_found or 0 }}</span>
+              <span class="stat-label">issues found</span>
+            </div>
+            <div class="stat">
+              <span class="stat-value">
+                <span class="badge badge-{{ rs.risk_level or 'medium' }}">{{ rs.risk_level or '—' }}</span>
+              </span>
+              <span class="stat-label">risk</span>
+            </div>
+          </div>
+          {% if rs.category %}
+          <span class="badge badge-blue" style="margin-bottom:0.75rem;">{{ rs.category }}</span>
+          {% endif %}
+          {% if rs.risk_factors %}
+          <ul style="font-size:0.85rem;color:#374151;margin:0;padding-left:1.2rem;">
+            {% for f in rs.risk_factors %}<li>{{ f }}</li>{% endfor %}
+          </ul>
+          {% endif %}
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- Approval buttons -->
+  <div class="card">
+    <div class="card-body">
+      <div style="font-size:1rem;font-weight:700;margin-bottom:0.35rem;">Your Decision</div>
+      <p style="font-size:0.85rem;color:#64748b;margin-bottom:1.25rem;">
+        The Gatekeeper will only allow creation on GitHub if you explicitly approve.
+        Rejecting aborts safely — nothing will be created.
+      </p>
+      <div class="approval-row">
+        <form action="{{ url_for('draft_confirm') }}" method="post">
+          <input type="hidden" name="draft_id" value="{{ draft_id }}">
+          <input type="hidden" name="decision" value="approve">
+          <button type="submit" class="btn btn-success btn-full btn-lg">
+            Approve &amp; Create on GitHub
+          </button>
+        </form>
+        <form action="{{ url_for('draft_confirm') }}" method="post">
+          <input type="hidden" name="draft_id" value="{{ draft_id }}">
+          <input type="hidden" name="decision" value="reject">
+          <button type="submit" class="btn btn-danger btn-full btn-lg">
+            Reject — Do Not Create
+          </button>
+        </form>
+      </div>
+    </div>
+  </div>
+
+</div>
+{% endblock %}

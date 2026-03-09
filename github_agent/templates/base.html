@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}GitHub Review Agent{% endblock %}</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+  {% block head %}{% endblock %}
+</head>
+<body>
+
+<nav class="app-nav">
+  <a class="brand" href="/">
+    <svg width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+      <path stroke-linecap="round" stroke-linejoin="round" d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4"/>
+    </svg>
+    GitHub Review Agent
+  </a>
+  <ul class="nav-links">
+    <li>
+      <a href="{{ url_for('index') }}" class="{{ 'active' if request.path == '/' }}">
+        <span class="nav-step">1</span> Review
+      </a>
+    </li>
+    <li>
+      <a href="{{ url_for('draft_form') }}" class="{{ 'active' if request.path.startswith('/draft') }}">
+        <span class="nav-step">2</span> Draft
+      </a>
+    </li>
+    <li>
+      <a href="{{ url_for('improve_form') }}" class="{{ 'active' if request.path.startswith('/improve') }}">
+        <span class="nav-step">3</span> Improve
+      </a>
+    </li>
+  </ul>
+  <div class="nav-badge">
+    <span title="Multi-Agent Architecture">Multi-Agent</span>
+    <span title="Planning Pattern">Planning</span>
+    <span title="Reflection Pattern">Reflection</span>
+  </div>
+</nav>
+
+{% with messages = get_flashed_messages(with_categories=true) %}
+  {% if messages %}
+  <div id="flash-container">
+    {% for category, message in messages %}
+    <div class="alert alert-{{ category }}" role="alert">
+      <span>{{ message }}</span>
+      <button class="alert-close" onclick="this.parentElement.remove()" title="Dismiss">&times;</button>
+    </div>
+    {% endfor %}
+  </div>
+  {% endif %}
+{% endwith %}
+
+{% block content %}{% endblock %}
+
+{% block scripts %}{% endblock %}
+<script>
+  // Auto-dismiss flash messages after 7 seconds
+  (function() {
+    var c = document.getElementById('flash-container');
+    if (!c) return;
+    setTimeout(function() {
+      c.style.transition = 'opacity 0.5s';
+      c.style.opacity = '0';
+      setTimeout(function() { c.remove(); }, 500);
+    }, 7000);
+  })();
+</script>
+</body>
+</html>
