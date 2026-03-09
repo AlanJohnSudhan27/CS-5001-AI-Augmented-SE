@@ -79,8 +79,30 @@
         </a>
         <a href="{{ url_for('index') }}" class="btn btn-ghost">New Review</a>
       </div>
+      <div style="margin-top:0.65rem;font-size:0.82rem;color:#64748b;">
+        Selecting <b>Draft Issue/PR from this Review</b> carries forward this saved review context (scope, findings, and recommendation).
+      </div>
     </div>
   </div>
+
+  {% set security_issues = s.security_issues or [] %}
+  {% if security_issues %}
+  <div class="card" style="margin-bottom:1rem;">
+    <div class="card-body">
+      <div style="font-size:0.95rem;font-weight:600;color:#991b1b;margin-bottom:0.6rem;">
+        Security Issues ({{ security_issues|length }})
+      </div>
+      <ul style="margin:0;padding-left:1.1rem;">
+        {% for it in security_issues %}
+        <li style="margin:0.35rem 0;line-height:1.4;">
+          <span style="font-family:monospace;">{{ it.file }}{% if it.line %}:{{ it.line }}{% endif %}</span>
+          — {{ it.message }}
+        </li>
+        {% endfor %}
+      </ul>
+    </div>
+  </div>
+  {% endif %}
 
   <!-- Files (collapsible) -->
   {% set files = report.get('summary', {}).get('files') or [] %}

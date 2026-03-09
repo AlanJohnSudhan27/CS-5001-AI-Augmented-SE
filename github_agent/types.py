@@ -39,6 +39,7 @@ class ReviewerResult:
     llm_analysis: str
     diff_result: Any       # DiffResult | None
     files_summary: List[dict] = field(default_factory=list)
+    tool_evidence: dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass

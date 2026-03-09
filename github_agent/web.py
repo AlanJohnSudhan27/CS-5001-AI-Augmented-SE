@@ -18,7 +18,7 @@ from github_agent.types import AgentConfig
 APP = Flask(__name__)
 APP.secret_key = os.environ.get("REVIEW_AGENT_SECRET", str(uuid.uuid4()))
 
-OLLAMA_MODEL = os.environ.get("OLLAMA_MODEL", "llama3:8b")
+OLLAMA_MODEL = "llama3:8b"
 OLLAMA_HOST = os.environ.get("OLLAMA_HOST", "http://localhost:11434")
 
 REPORTS: dict[str, dict] = {}
@@ -272,6 +272,7 @@ def draft_form():
 @APP.route("/draft/run", methods=["POST"])
 def draft_run():
     draft_source = request.form.get("draft_source", "instruction")
+    report_id = request.form.get("report_id", "").strip()
     artifact_type = request.form.get("artifact_type", "issue")
     instruction = request.form.get("instruction", "").strip()
     repo_input = request.form.get("repo", ".").strip()
@@ -281,7 +282,15 @@ def draft_run():
     token = request.form.get("github_token", "").strip()
     head_branch = request.form.get("head_branch", "").strip()
 
-    local_path = _local_path(repo_input)
+    report = REPORTS.get(report_id, {}) if report_id else {}
+    if draft_source == "review" and report:
+        repo_input = report.get("repo_input") or repo_input
+        if not from_commit:
+            from_commit = (report.get("from_commit") or "").strip()
+        if not to_commit:
+            to_commit = (report.get("to_commit") or "").strip()
+
+    local_path = report.get("local_path") if (draft_source == "review" and report.get("local_path")) else _local_path(repo_input)
     github_owner, github_repo_name = _parse_github_repo(github_input or repo_input)
     action = f"create_{artifact_type}"
 
@@ -299,14 +308,21 @@ def draft_run():
             if not tools.is_git_repo():
                 flash("Not a git repository. Check the repo path.", "danger")
                 return redirect(url_for("draft_form"))
-            if from_commit and to_commit:
-                diff_result = tools.diff_from_commits(from_commit, to_commit)
-                commit_msgs = tools.commit_messages(from_commit, to_commit)
-            elif from_commit:
-                diff_result = tools.diff_from_commits(f"{from_commit}~1", from_commit)
-                commit_msgs = []
+
+            compare_mode = (report.get("compare_mode") or "").strip() if report else ""
+            base_branch = (report.get("base_branch") or "").strip() if report else ""
+            if compare_mode == "commits":
+                if from_commit and to_commit:
+                    diff_result = tools.diff_from_commits(from_commit, to_commit)
+                    commit_msgs = tools.commit_messages(from_commit, to_commit)
+                elif from_commit:
+                    diff_result = tools.diff_from_commits(f"{from_commit}~1", from_commit)
+                    commit_msgs = []
+                else:
+                    flash("No commit context found for this review report.", "danger")
+                    return redirect(url_for("draft_form"))
             else:
-                diff_result = tools.diff_from_branch(None)
+                diff_result = tools.diff_from_branch(base_branch or None)
                 commit_msgs = []
             package = orchestrator.run_review_and_draft(diff_result, commit_msgs, action, instruction)
         else:

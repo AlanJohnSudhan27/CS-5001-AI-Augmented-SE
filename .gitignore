@@ -1,0 +1,18 @@
+# Python cache/artifacts
+__pycache__/
+**/__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+
+# Test/cache directories
+.pytest_cache/
+pytest-cache-files-*/
+
+# Local runtime logs
+.github_agent_logs/
+
+# Virtual environments
+.venv/
+venv/
+

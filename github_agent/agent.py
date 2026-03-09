@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 from typing import Any, Optional
 
@@ -20,7 +21,9 @@ class Agent:
         self.cfg = cfg
         self.repo = Path(cfg.repo).resolve()
         self.tools = Tools(self.repo)
+        timeout_s = self._llm_timeout_s()
         self.llm = OllamaLLM(model=cfg.model, host=cfg.host, temperature=cfg.temperature)
+        self.llm.timeout_s = timeout_s
 
     def _log(self, message: Any) -> None:
         if self.cfg.verbose:
@@ -41,8 +44,15 @@ class Agent:
         if not diff_result.files:
             return RunResult(True, "No changes found.", summary={"files": 0, "target_branch": target_branch})
 
-        # Force use of larger model for deeper review
-        self.llm = OllamaLLM(model="llama3:70b", host=cfg.host, temperature=cfg.temperature)
+        # Optional model override for deeper review (disabled by default).
+        forced_model = (os.environ.get("REVIEW_FORCE_MODEL", "") or "").strip()
+        if forced_model:
+            self.llm = OllamaLLM(
+                model=forced_model,
+                host=self.cfg.host,
+                temperature=self.cfg.temperature,
+                timeout_s=self._llm_timeout_s(),
+            )
         return self._perform_review(
             diff_result=diff_result,
             use_colors=use_colors,
@@ -100,15 +110,22 @@ class Agent:
         risk_assessment = risk_assessor.assess(diff_result, issues, category)
         decision, justification = determine_decision(risk_assessment, issues, category)
 
-        llm_override = self._model_override(
-            diff_result=diff_result,
-            issues=issues,
-            fallback_category=category,
-            fallback_risk=risk_assessment.level,
-            fallback_decision=decision,
-            fallback_justification=justification,
-            commit_messages=commit_messages or [],
-        )
+        llm_override = None
+        if not self._is_fast_mode():
+            try:
+                llm_override = self._model_override(
+                    diff_result=diff_result,
+                    issues=issues,
+                    fallback_category=category,
+                    fallback_risk=risk_assessment.level,
+                    fallback_decision=decision,
+                    fallback_justification=justification,
+                    commit_messages=commit_messages or [],
+                )
+            except Exception as exc:
+                # Never fail the review because of LLM/network timeouts.
+                self._log(f"Model override failed; using static decision: {exc}")
+                llm_override = None
 
         if llm_override:
             category = llm_override["category"]
@@ -139,6 +156,27 @@ class Agent:
             "justification": justification,
             "model": self.cfg.model,
             "host": self.cfg.host,
+            "issues": [
+                {
+                    "severity": issue.severity.value,
+                    "type": issue.issue_type.value,
+                    "message": issue.message,
+                    "file": issue.file_path,
+                    "line": issue.line_number,
+                }
+                for issue in issues[:200]
+            ],
+            "security_issues": [
+                {
+                    "severity": issue.severity.value,
+                    "type": issue.issue_type.value,
+                    "message": issue.message,
+                    "file": issue.file_path,
+                    "line": issue.line_number,
+                }
+                for issue in issues
+                if issue.issue_type.value == "security"
+            ],
             "files": [
                 {
                     "path": f.path,
@@ -161,15 +199,23 @@ class Agent:
         fallback_justification: str,
         commit_messages: list[str],
     ) -> Optional[dict[str, Any]]:
-        # Gather full file contents for changed files (up to 10 for prompt size)
+        fast = self._is_fast_mode()
+        max_files = 3 if fast else 10
+        max_content = 900 if fast else 4000
+        max_issue_items = 20 if fast else 100
+        max_file_items = 10 if fast else 50
+        max_commits = 8 if fast else 30
+        prompt_clamp = 3000 if fast else 14000
+
+        # Gather full file contents for changed files
         file_contents = []
-        for file_change in diff_result.files[:10]:
+        for file_change in diff_result.files[:max_files]:
             try:
                 with open(file_change.path, encoding="utf-8", errors="replace") as f:
                     content = f.read()
                 file_contents.append({
                     "path": file_change.path,
-                    "content": clamp(content, 4000),
+                    "content": clamp(content, max_content),
                 })
             except Exception:
                 continue
@@ -187,7 +233,7 @@ class Agent:
                     "additions": file_change.additions,
                     "deletions": file_change.deletions,
                 }
-                for file_change in diff_result.files[:50]
+                for file_change in diff_result.files[:max_file_items]
             ],
             "issues": [
                 {
@@ -197,9 +243,9 @@ class Agent:
                     "file": issue.file_path,
                     "line": issue.line_number,
                 }
-                for issue in issues[:100]
+                for issue in issues[:max_issue_items]
             ],
-            "commit_messages": commit_messages[:30],
+            "commit_messages": commit_messages[:max_commits],
             "fallback": {
                 "category": fallback_category.value,
                 "risk_level": fallback_risk.value,
@@ -209,25 +255,42 @@ class Agent:
             "file_contents": file_contents,
         }
 
-        # Prompt the LLM to do a full code review, not just summarize static issues
+        # Prompt the LLM to do a full code review, not just summarize static issues.
         prompt = (
-            "You are a senior software reviewer."
-            "\nGiven the following context, perform a full code review of the changed files."
-            "\nIdentify ALL potential issues, including bugs, security, code quality, and performance."
-            "\nBase your review on the full file contents and static analysis results provided."
-            "\nReturn ONLY valid JSON in this schema:"
-            "  {"
-            "    'category': 'feature|bugfix|refactor|documentation|test|chore|style|security|performance',"
-            "    'risk_level': 'low|medium|high',"
-            "    'decision': 'create_issue|create_pr|no_action',"
-            "    'justification': 'string',"
-            "    'issues_found': [ { 'file': str, 'line': int, 'type': str, 'message': str } ... ]"
-            "  }"
-            "\nBe thorough. Justification must cite specific evidence from the code."
-            f"\nCONTEXT_JSON:\n{clamp(json.dumps(context, indent=2), 14000)}\n"
+            "Role: Senior software reviewer.\n"
+            "Objective: perform a full review of changed files and recommend final action.\n"
+            "Grounding policy:\n"
+            "- Use only provided context, file contents, and static-analysis findings\n"
+            "- Do not fabricate files, line numbers, or issue types\n"
+            "- If evidence is weak, reflect uncertainty inside justification\n"
+            "Output contract:\n"
+            "- Return ONLY one valid JSON object\n"
+            "- No markdown, no prose before/after JSON\n"
+            "- Use double quotes and no trailing commas\n"
+            "Reasoning protocol:\n"
+            "- Think step-by-step internally\n"
+            "- Return only final JSON\n"
+            "Schema (exact):\n"
+            "{\n"
+            "  \"category\": \"feature|bugfix|refactor|documentation|test|chore|style|security|performance\",\n"
+            "  \"risk_level\": \"low|medium|high\",\n"
+            "  \"decision\": \"create_issue|create_pr|no_action\",\n"
+            "  \"justification\": \"string\",\n"
+            "  \"issues_found\": [{\"file\": \"string\", \"line\": 1, \"type\": \"string\", \"message\": \"string\"}]\n"
+            "}\n"
+            "Decision policy:\n"
+            "- High-impact security or correctness risk should strongly favor create_issue\n"
+            "- Low-risk formatting/doc-only changes should favor no_action\n"
+            "- create_pr is for improvement proposals without incident-level urgency\n"
+            "Justification must cite concrete evidence from provided context.\n"
+            f"\nCONTEXT_JSON:\n{clamp(json.dumps(context, indent=2), prompt_clamp)}\n"
         )
         self._log(prompt)
-        raw = self.llm.generate(prompt)
+        try:
+            raw = self.llm.generate(prompt)
+        except Exception as exc:
+            self._log(f"Model override skipped (LLM unavailable): {exc}")
+            return None
         self._log(raw)
 
         try:
@@ -252,6 +315,14 @@ class Agent:
             "justification": justification,
             "issues_found": payload.get("issues_found", []),
         }
+
+    @staticmethod
+    def _llm_timeout_s() -> int:
+        return 60
+
+    @staticmethod
+    def _is_fast_mode() -> bool:
+        return True
 
     @staticmethod
     def _to_category(value: Any) -> Optional[ChangeCategory]:

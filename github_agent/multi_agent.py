@@ -10,7 +10,10 @@ Architecture — four identifiable agent roles:
 """
 from __future__ import annotations
 
+import datetime as dt
 import json
+import os
+from pathlib import Path
 from typing import Optional, Union
 
 from .analyzer import CodeAnalyzer
@@ -37,6 +40,14 @@ from .types import (
     ReviewerResult,
 )
 from .utils import clamp, parse_json_object
+
+ISSUE_REQUIRED_SECTIONS = ["problem_description", "evidence", "acceptance_criteria", "risk_level"]
+PR_REQUIRED_SECTIONS = ["summary", "files_affected", "behavior_change", "test_plan", "risk_level"]
+ALLOWED_QUALITY = {"good", "needs_improvement", "poor"}
+
+
+def _is_fast_mode() -> bool:
+    return True
 
 
 # ---------------------------------------------------------------------------
@@ -70,10 +81,16 @@ class ReviewerAgent:
         risk = risk_assessor.assess(diff_result, issues, category)
 
         # Build a compact diff snippet for the LLM (Tool Use: real diff data)
+        fast = _is_fast_mode()
+        max_files = 2 if fast else 10
+        max_diff_chars = 90 if fast else 400
+        max_prompt_issues = 5 if fast else 20
+        llm_clamp = 1200 if fast else 7000
+
         diff_snippet = "\n".join(
             f"File: {f.path} ({f.status}, +{f.additions}/-{f.deletions})\n"
-            + f.diff_content[:400]
-            for f in diff_result.files[:10]
+            + f.diff_content[:max_diff_chars]
+            for f in diff_result.files[:max_files]
         )
 
         issues_for_prompt = [
@@ -83,17 +100,16 @@ class ReviewerAgent:
                 "severity": i.severity.value,
                 "type": i.issue_type.value,
             }
-            for i in issues[:20]
+            for i in issues[:max_prompt_issues]
         ]
 
+        llm_analysis = ""
         prompt = reviewer_deep_analysis_prompt(
-            diff_snippet=clamp(diff_snippet, 7000),
+            diff_snippet=clamp(diff_snippet, llm_clamp),
             issues=issues_for_prompt,
             category=category.value,
             risk_level=risk.level.value,
         )
-
-        llm_analysis = ""
         try:
             llm_analysis = self.llm.generate(prompt)
         except Exception as exc:
@@ -108,6 +124,7 @@ class ReviewerAgent:
             }
             for f in diff_result.files
         ]
+        tool_evidence = self._build_tool_evidence(diff_result, issues, commit_messages or [])
 
         return ReviewerResult(
             issues=issues,
@@ -116,7 +133,51 @@ class ReviewerAgent:
             llm_analysis=llm_analysis,
             diff_result=diff_result,
             files_summary=files_summary,
+            tool_evidence=tool_evidence,
         )
+
+    def _build_tool_evidence(self, diff_result: DiffResult, issues: list, commit_messages: list[str]) -> dict:
+        file_entries = []
+        file_limit = 8 if _is_fast_mode() else 25
+        for idx, file_change in enumerate(diff_result.files[:file_limit], start=1):
+            file_entries.append(
+                {
+                    "id": f"file-{idx}",
+                    "path": file_change.path,
+                    "status": file_change.status,
+                    "additions": file_change.additions,
+                    "deletions": file_change.deletions,
+                }
+            )
+
+        issue_entries = []
+        issue_limit = 10 if _is_fast_mode() else 50
+        for idx, issue in enumerate((issues or [])[:issue_limit], start=1):
+            issue_entries.append(
+                {
+                    "id": f"issue-{idx}",
+                    "file": issue.file_path,
+                    "line": issue.line_number,
+                    "severity": issue.severity.value,
+                    "type": issue.issue_type.value,
+                    "message": issue.message[:120],
+                }
+            )
+
+        commit_entries = []
+        commit_limit = 8 if _is_fast_mode() else 20
+        for idx, message in enumerate((commit_messages or [])[:commit_limit], start=1):
+            clean = str(message).strip()
+            if not clean:
+                continue
+            commit_entries.append({"id": f"commit-{idx}", "message": clean})
+
+        return {
+            "source": "tool_use_pipeline",
+            "files": file_entries,
+            "issues": issue_entries,
+            "commits": commit_entries,
+        }
 
 
 # ---------------------------------------------------------------------------
@@ -154,12 +215,12 @@ class PlannerAgent:
             "instruction": instruction,
             "issues": [
                 {
-                    "message": i.message,
+                    "message": i.message[:120],
                     "file": i.file_path,
                     "severity": i.severity.value,
                     "type": i.issue_type.value,
                 }
-                for i in (reviewer_result.issues or [])[:20]
+                for i in (reviewer_result.issues or [])[:6]
             ],
             "category": reviewer_result.category.value
             if reviewer_result.category
@@ -171,16 +232,18 @@ class PlannerAgent:
             if reviewer_result.risk
             else [],
             "files_changed": len(reviewer_result.files_summary),
-            "llm_analysis": reviewer_result.llm_analysis[:1500]
-            if reviewer_result.llm_analysis
-            else "",
+            "files": [f.get("path") for f in reviewer_result.files_summary[:8] if f.get("path")],
+            "tool_evidence_ids": {
+                "files": [f.get("id") for f in reviewer_result.tool_evidence.get("files", [])[:8]],
+                "issues": [i.get("id") for i in reviewer_result.tool_evidence.get("issues", [])[:8]],
+            },
         }
 
-        prompt = planner_prompt(
-            context_json=clamp(json.dumps(context, indent=2), 7000)
-        )
-
         raw = ""
+        parsed: dict = {}
+        prompt = planner_prompt(
+            context_json=clamp(json.dumps(context, indent=2), 1800 if _is_fast_mode() else 7000)
+        )
         try:
             raw = self.llm.generate(prompt)
             parsed = parse_json_object(raw)
@@ -188,23 +251,74 @@ class PlannerAgent:
             parsed = {}
 
         artifact_type = "issue" if "issue" in action else "pr"
+        normalized = self._normalize_plan(parsed, reviewer_result, artifact_type)
 
         return PlannerResult(
             action=action,
             artifact_type=artifact_type,
-            sections=parsed.get(
-                "sections",
-                (
-                    ["title", "problem_description", "evidence", "acceptance_criteria", "risk_level"]
-                    if artifact_type == "issue"
-                    else ["title", "summary", "files_affected", "behavior_change", "test_plan", "risk_level"]
-                ),
-            ),
-            key_points=parsed.get("key_points", []),
-            evidence=parsed.get("evidence", []),
-            rationale=parsed.get("rationale", ""),
+            sections=normalized["sections"],
+            key_points=normalized["key_points"],
+            evidence=normalized["evidence"],
+            rationale=normalized["rationale"],
             raw_plan=raw,
         )
+
+    @staticmethod
+    def _coerce_list_of_str(value: object) -> list[str]:
+        if not isinstance(value, list):
+            return []
+        return [str(v).strip() for v in value if str(v).strip()]
+
+    def _normalize_plan(
+        self,
+        parsed: dict,
+        reviewer_result: ReviewerResult,
+        artifact_type: str,
+    ) -> dict[str, list[str] | str]:
+        required_sections = ISSUE_REQUIRED_SECTIONS if artifact_type == "issue" else PR_REQUIRED_SECTIONS
+        sections = self._coerce_list_of_str(parsed.get("sections"))
+        for section in required_sections:
+            if section not in sections:
+                sections.append(section)
+        if "title" not in sections:
+            sections.insert(0, "title")
+
+        key_points = self._coerce_list_of_str(parsed.get("key_points"))
+        if not key_points:
+            key_points = [
+                f"Category: {reviewer_result.category.value if reviewer_result.category else 'unknown'}",
+                f"Risk level: {reviewer_result.risk.level.value if reviewer_result.risk else 'medium'}",
+                f"Issue count: {len(reviewer_result.issues or [])}",
+            ]
+
+        evidence = self._coerce_list_of_str(parsed.get("evidence"))
+        if not evidence:
+            evidence = [
+                f"file:{f.get('path')}"
+                for f in (reviewer_result.files_summary or [])[:8]
+                if f.get("path")
+            ]
+            evidence.extend(
+                [
+                    f"issue:{i.file_path}:{i.line_number or 'n/a'}:{i.message}"
+                    for i in (reviewer_result.issues or [])[:8]
+                ]
+            )
+        evidence = evidence[:20]
+
+        rationale = str(parsed.get("rationale") or "").strip()
+        if not rationale:
+            rationale = (
+                "Action is warranted based on observed risk, concrete issue findings, "
+                "and changed files in the analyzed diff."
+            )
+
+        return {
+            "sections": sections,
+            "key_points": key_points[:15],
+            "evidence": evidence,
+            "rationale": rationale,
+        }
 
 
 # ---------------------------------------------------------------------------
@@ -247,7 +361,11 @@ class WriterAgent:
         return IssueDraft(
             title=parsed.get("title", "Issue: Code Review Finding"),
             problem_description=parsed.get("problem_description", ""),
-            evidence=parsed.get("evidence", ""),
+            evidence=self._coerce_issue_evidence(
+                parsed.get("evidence"),
+                reviewer_result.files_summary,
+                reviewer_result.issues,
+            ),
             acceptance_criteria=parsed.get("acceptance_criteria", []),
             risk_level=parsed.get(
                 "risk_level",
@@ -282,9 +400,9 @@ class WriterAgent:
         return PRDraft(
             title=parsed.get("title", "PR: Code Changes"),
             summary=parsed.get("summary", ""),
-            files_affected=parsed.get(
-                "files_affected",
-                [f["path"] for f in reviewer_result.files_summary[:10]],
+            files_affected=self._coerce_files_affected(
+                parsed.get("files_affected"),
+                reviewer_result.files_summary,
             ),
             behavior_change=parsed.get("behavior_change", ""),
             test_plan=parsed.get("test_plan", ""),
@@ -336,15 +454,18 @@ class WriterAgent:
         )
 
     def _build_context(self, reviewer_result: ReviewerResult) -> dict:
+        fast = _is_fast_mode()
+        allowed_file_limit = 4 if fast else 20
+        allowed_issue_limit = 6 if fast else 20
         return {
-            "files": reviewer_result.files_summary[:15],
+            "files": reviewer_result.files_summary[:allowed_file_limit],
             "issues": [
                 {
-                    "message": i.message,
+                    "message": i.message[:120],
                     "file": i.file_path,
                     "severity": i.severity.value,
                 }
-                for i in (reviewer_result.issues or [])[:20]
+                for i in (reviewer_result.issues or [])[:allowed_issue_limit]
             ],
             "category": reviewer_result.category.value
             if reviewer_result.category
@@ -355,10 +476,53 @@ class WriterAgent:
             "risk_factors": reviewer_result.risk.factors[:5]
             if reviewer_result.risk
             else [],
-            "llm_analysis": reviewer_result.llm_analysis[:1500]
-            if reviewer_result.llm_analysis
-            else "",
+            "tool_evidence_ids": {
+                "files": [f.get("id") for f in reviewer_result.tool_evidence.get("files", [])[:allowed_file_limit]],
+                "issues": [i.get("id") for i in reviewer_result.tool_evidence.get("issues", [])[:allowed_issue_limit]],
+            },
+            "evidence_ledger": {
+                "allowed_files": [f["path"] for f in reviewer_result.files_summary[:allowed_file_limit] if f.get("path")],
+                "allowed_issue_refs": [
+                    {
+                        "file": i.file_path,
+                        "line": i.line_number,
+                        "message": i.message[:120],
+                    }
+                    for i in (reviewer_result.issues or [])[:allowed_issue_limit]
+                ],
+            },
         }
+
+    @staticmethod
+    def _coerce_files_affected(value: object, files_summary: list[dict]) -> list[str]:
+        allowed = {f.get("path") for f in files_summary if f.get("path")}
+        if isinstance(value, list):
+            filtered = [str(v).strip() for v in value if str(v).strip() in allowed]
+            if filtered:
+                return filtered[:10]
+        return [f.get("path") for f in files_summary[:10] if f.get("path")]
+
+    @staticmethod
+    def _coerce_issue_evidence(value: object, files_summary: list[dict], issues: list) -> str:
+        text = str(value or "").strip()
+        allowed_files = [f.get("path") for f in files_summary if f.get("path")]
+        referenced = [path for path in allowed_files if path in text]
+        if referenced:
+            return text
+
+        file_refs = ", ".join(allowed_files[:5]) if allowed_files else "none"
+        issue_refs = []
+        for issue in (issues or [])[:5]:
+            marker = f"{issue.file_path}:{issue.line_number or 'n/a'}"
+            issue_refs.append(marker)
+        issue_ref_text = ", ".join(issue_refs) if issue_refs else "none"
+
+        if text:
+            return (
+                f"{text}\n"
+                f"Verified references: files[{file_refs}] issues[{issue_ref_text}]"
+            )
+        return f"Verified references: files[{file_refs}] issues[{issue_ref_text}]"
 
 
 # ---------------------------------------------------------------------------
@@ -379,6 +543,8 @@ class CriticAgent:
 
     def __init__(self, llm):
         self.llm = llm
+        log_target = os.environ.get("GITHUB_AGENT_CRITIC_LOG", ".github_agent_logs/critic_reflections.jsonl")
+        self._critic_log_path = Path(log_target)
 
     def reflect(
         self,
@@ -389,26 +555,26 @@ class CriticAgent:
         if isinstance(draft, IssueDraft):
             draft_dict = {
                 "type": "issue",
-                "title": draft.title,
-                "problem_description": draft.problem_description,
-                "evidence": draft.evidence,
-                "acceptance_criteria": draft.acceptance_criteria,
+                "title": draft.title[:140],
+                "problem_description": draft.problem_description[:500],
+                "evidence": draft.evidence[:500],
+                "acceptance_criteria": (draft.acceptance_criteria or [])[:5],
                 "risk_level": draft.risk_level,
             }
         else:
             draft_dict = {
                 "type": "pr",
-                "title": draft.title,
-                "summary": draft.summary,
-                "files_affected": draft.files_affected,
-                "behavior_change": draft.behavior_change,
-                "test_plan": draft.test_plan,
+                "title": draft.title[:140],
+                "summary": draft.summary[:500],
+                "files_affected": (draft.files_affected or [])[:6],
+                "behavior_change": draft.behavior_change[:400],
+                "test_plan": draft.test_plan[:400],
                 "risk_level": draft.risk_level,
             }
 
         actual_evidence = {
-            "issues_found": [i.message for i in (reviewer_result.issues or [])[:10]],
-            "files_changed": [f["path"] for f in reviewer_result.files_summary[:10]],
+            "issues_found": [str(i.message)[:140] for i in (reviewer_result.issues or [])[:6]],
+            "files_changed": [f["path"] for f in reviewer_result.files_summary[:6]],
             "risk_level": reviewer_result.risk.level.value
             if reviewer_result.risk
             else "medium",
@@ -420,22 +586,113 @@ class CriticAgent:
         prompt = reflect_prompt(draft=draft_dict, actual_evidence=actual_evidence)
 
         raw = ""
+        parsed: dict = {}
         try:
             raw = self.llm.generate(prompt)
             parsed = parse_json_object(raw)
         except Exception:
-            parsed = {}
+            parsed = self._fallback_reflection(draft_dict, actual_evidence)
+            raw = ""
+
+        result = self._coerce_reflection(parsed, raw)
+        self._log_reflection(result, draft_dict, actual_evidence)
+        return result
+
+    @staticmethod
+    def _coerce_list_of_str(value: object) -> list[str]:
+        if not isinstance(value, list):
+            return []
+        return [str(v).strip() for v in value if str(v).strip()]
+
+    def _coerce_reflection(self, parsed: dict, raw: str) -> ReflectionResult:
+        unsupported_claims = self._coerce_list_of_str(parsed.get("unsupported_claims"))
+        missing_evidence = self._coerce_list_of_str(parsed.get("missing_evidence"))
+        missing_tests = self._coerce_list_of_str(parsed.get("missing_tests"))
+        policy_violations = self._coerce_list_of_str(parsed.get("policy_violations"))
+        suggestions = self._coerce_list_of_str(parsed.get("suggestions"))
+
+        overall_quality = str(parsed.get("overall_quality") or "needs_improvement").strip().lower()
+        if overall_quality not in ALLOWED_QUALITY:
+            overall_quality = "needs_improvement"
+
+        passed = bool(parsed.get("passed", False))
+        if policy_violations or overall_quality == "poor":
+            passed = False
 
         return ReflectionResult(
-            passed=bool(parsed.get("passed", True)),
-            unsupported_claims=parsed.get("unsupported_claims", []),
-            missing_evidence=parsed.get("missing_evidence", []),
-            missing_tests=parsed.get("missing_tests", []),
-            policy_violations=parsed.get("policy_violations", []),
-            suggestions=parsed.get("suggestions", []),
-            overall_quality=parsed.get("overall_quality", "needs_improvement"),
+            passed=passed,
+            unsupported_claims=unsupported_claims,
+            missing_evidence=missing_evidence,
+            missing_tests=missing_tests,
+            policy_violations=policy_violations,
+            suggestions=suggestions,
+            overall_quality=overall_quality,
             raw=raw,
         )
+
+    @staticmethod
+    def _fallback_reflection(draft: dict, actual_evidence: dict) -> dict:
+        """Deterministic fallback when Critic LLM is unavailable/timeouts."""
+        missing_evidence = []
+        missing_tests = []
+        policy_violations = []
+        suggestions = []
+
+        if draft.get("type") == "issue":
+            if not draft.get("evidence"):
+                missing_evidence.append("Evidence section is empty.")
+            if not draft.get("acceptance_criteria"):
+                missing_tests.append("Acceptance criteria are missing or empty.")
+        else:
+            if not draft.get("test_plan"):
+                missing_tests.append("Test plan is missing or empty.")
+            if not draft.get("files_affected"):
+                missing_evidence.append("Files affected list is missing or empty.")
+
+        if not actual_evidence.get("files_changed"):
+            policy_violations.append("No verified file evidence available for reflection.")
+            suggestions.append("Run reflection with review context enabled.")
+
+        if missing_evidence or missing_tests:
+            suggestions.append("Add concrete evidence references and testable verification steps.")
+
+        return {
+            "passed": not (policy_violations or missing_tests),
+            "unsupported_claims": [],
+            "missing_evidence": missing_evidence,
+            "missing_tests": missing_tests,
+            "policy_violations": policy_violations,
+            "suggestions": suggestions or ["Proceed with manual gatekeeper review."],
+            "overall_quality": "needs_improvement" if (missing_evidence or missing_tests or policy_violations) else "good",
+        }
+
+    def _log_reflection(self, result: ReflectionResult, draft: dict, actual_evidence: dict) -> None:
+        """Write one JSON line per critic run so issues can be analyzed over time."""
+        payload = {
+            "ts_utc": dt.datetime.now(dt.UTC).isoformat(),
+            "source": "critic_agent",
+            "passed": result.passed,
+            "overall_quality": result.overall_quality,
+            "unsupported_claims": result.unsupported_claims,
+            "missing_evidence": result.missing_evidence,
+            "missing_tests": result.missing_tests,
+            "policy_violations": result.policy_violations,
+            "suggestions": result.suggestions,
+            "draft_type": draft.get("type", "unknown"),
+            "draft_title": str(draft.get("title", ""))[:200],
+            "files_changed_count": len(actual_evidence.get("files_changed", []) or []),
+            "issues_found_count": len(actual_evidence.get("issues_found", []) or []),
+            "risk_level": actual_evidence.get("risk_level", "unknown"),
+            "category": actual_evidence.get("category", "unknown"),
+            "raw_preview": (result.raw or "")[:500],
+        }
+        try:
+            self._critic_log_path.parent.mkdir(parents=True, exist_ok=True)
+            with self._critic_log_path.open("a", encoding="utf-8") as fp:
+                fp.write(json.dumps(payload, ensure_ascii=True) + "\n")
+        except Exception:
+            # Logging must never break the review pipeline.
+            return
 
 
 # ---------------------------------------------------------------------------
@@ -579,6 +836,7 @@ class MultiAgentOrchestrator:
                 llm_analysis="",
                 diff_result=None,
                 files_summary=[],
+                tool_evidence={},
             )
             context = {}
 
@@ -590,17 +848,23 @@ class MultiAgentOrchestrator:
             reflection = self.critic.reflect(draft, reviewer_result)
         else:
             reflection = ReflectionResult(
-                passed=True,
-                unsupported_claims=[],
-                missing_evidence=[
-                    "No code diff provided — evidence claims cannot be verified against actual code."
+                passed=False,
+                unsupported_claims=[
+                    "Unable to verify factual claims because no code diff or file evidence was provided."
                 ],
-                missing_tests=[],
-                policy_violations=[],
+                missing_evidence=[
+                    "No code diff provided; evidence claims cannot be verified against actual code."
+                ],
+                missing_tests=[
+                    "Cannot validate test adequacy without changed files or executable verification context."
+                ],
+                policy_violations=[
+                    "Evidence verification unavailable in explicit-draft mode without diff context."
+                ],
                 suggestions=[
                     "Consider providing a repo path and base branch for evidence-based verification."
                 ],
-                overall_quality="good",
+                overall_quality="needs_improvement",
             )
 
         return self.gatekeeper.prepare(draft, reflection, reviewer_result)

@@ -9,22 +9,27 @@
       <p>Pipeline: Reviewer &rarr; Planner &rarr; Writer &rarr; Critic &rarr; Gatekeeper (you)</p>
     </div>
     <div class="card-body">
+      {% if report_id %}
+      <div class="alert alert-info" style="margin-bottom:1rem;">
+        Review context loaded from saved report <code>{{ report_id }}</code>.
+        Diff scope, findings, and recommendation context will be reused in this draft run.
+      </div>
+      {% endif %}
 
-      <!-- Source tabs -->
       <div class="tab-bar">
-        <button class="tab-btn {% if not report_id %}active{% endif %}" onclick="switchTab(this,'instruction-panel')">
+        <button type="button" class="tab-btn {% if not report_id %}active{% endif %}" onclick="switchTab(this,'instruction-panel')">
           From Explicit Instruction
         </button>
-        <button class="tab-btn {% if report_id %}active{% endif %}" onclick="switchTab(this,'review-panel')">
+        <button type="button" class="tab-btn {% if report_id %}active{% endif %}" onclick="switchTab(this,'review-panel')">
           From Code Review
         </button>
       </div>
 
-      <form action="{{ url_for('draft_run') }}" method="post">
+      <form action="{{ url_for('draft_run') }}" method="post" id="draft-form">
+        <input type="hidden" name="draft_source" id="draft_source" value="{% if report_id %}review{% else %}instruction{% endif %}">
+        <input type="hidden" name="report_id" id="src_report_id" value="{{ report_id or '' }}">
 
-        <!-- Instruction panel -->
         <div class="tab-panel {% if not report_id %}active{% endif %}" id="instruction-panel">
-          <input type="hidden" name="draft_source" value="instruction" id="src_instruction">
           <div class="form-group">
             <label for="instruction">Instruction</label>
             <textarea id="instruction" name="instruction" rows="4"
@@ -33,12 +38,10 @@
           </div>
         </div>
 
-        <!-- Review panel -->
         <div class="tab-panel {% if report_id %}active{% endif %}" id="review-panel">
-          <input type="hidden" name="report_id" value="{{ report_id or '' }}" id="src_report_id">
           <div class="form-group">
             <label for="repo">Repository <span class="hint">— local path or GitHub URL</span></label>
-            <input type="text" id="repo" name="repo" value="{{ report.repo or '.' }}" placeholder=".">
+            <input type="text" id="repo" name="repo" value="{{ report.repo or report.local_path or '.' }}" placeholder=".">
           </div>
           <div class="input-row" style="margin-bottom:1.25rem;">
             <div>
@@ -61,7 +64,6 @@
 
         <hr class="section-divider">
 
-        <!-- Artifact type -->
         <div class="form-group">
           <label>Artifact Type</label>
           <div class="toggle-group" style="max-width:280px;">
@@ -74,7 +76,6 @@
           </div>
         </div>
 
-        <!-- GitHub settings -->
         <div class="form-group">
           <label for="github_repo_input">GitHub Repository <span class="hint">— URL or owner/repo, needed to create on GitHub</span></label>
           <input type="text" id="github_repo_input" name="github_repo_input"
@@ -93,14 +94,13 @@
                  placeholder="feature/my-branch">
         </div>
 
-        <button type="submit" class="btn btn-primary btn-full btn-lg">
+        <button type="submit" class="btn btn-primary btn-full btn-lg" id="draft-submit-btn">
           Run Multi-Agent Pipeline &rarr;
         </button>
       </form>
     </div>
   </div>
 
-  <!-- Pipeline info -->
   <div class="card">
     <div class="card-body" style="font-size:0.825rem;color:#64748b;line-height:1.6;">
       <strong style="color:#374151;">Pipeline architecture:</strong>
@@ -121,17 +121,29 @@ function switchTab(btn, panelId) {
   document.querySelectorAll('.tab-panel').forEach(function(p) { p.classList.remove('active'); });
   btn.classList.add('active');
   document.getElementById(panelId).classList.add('active');
+  document.getElementById('draft_source').value = panelId === 'review-panel' ? 'review' : 'instruction';
 }
 
-// Show/hide head-branch field
+function updateHeadBranchVisibility() {
+  var selected = document.querySelector('[name="artifact_type"]:checked');
+  var isPr = selected && selected.value === 'pr';
+  document.getElementById('head-branch-group').style.display = isPr ? '' : 'none';
+}
+
 document.querySelectorAll('[name="artifact_type"]').forEach(function(el) {
-  el.addEventListener('change', function() {
-    document.getElementById('head-branch-group').style.display = this.value === 'pr' ? '' : 'none';
-  });
+  el.addEventListener('change', updateHeadBranchVisibility);
 });
 
-{% if suggested_action == 'create_pr' %}
-document.getElementById('head-branch-group').style.display = '';
-{% endif %}
+updateHeadBranchVisibility();
+
+document.getElementById('draft-form').addEventListener('submit', function() {
+  var btn = document.getElementById('draft-submit-btn');
+  btn.disabled = true;
+  btn.innerHTML = '<span class=\"spinner-border spinner-border-sm\" role=\"status\" aria-hidden=\"true\"></span> Running Multi-Agent Pipeline...';
+  var progress = document.createElement('div');
+  progress.className = 'alert alert-info mt-3';
+  progress.innerHTML = '<b>Pipeline running...</b> Reviewer, Planner, Writer, and Critic are processing this request.';
+  btn.parentNode.appendChild(progress);
+});
 </script>
 {% endblock %}
