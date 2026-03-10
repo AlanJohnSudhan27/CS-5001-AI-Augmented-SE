@@ -1,0 +1,600 @@
+{
+  "name": "GitHub Multi-Agent Assistant - Ollama + n8n",
+  "nodes": [
+    {
+      "id": "node-manual-trigger",
+      "name": "When clicking Execute workflow",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        120
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "node-manual-defaults",
+      "name": "Manual Request Defaults",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        220,
+        120
+      ],
+      "parameters": {
+        "jsCode": "return [{ json: {\n  action: 'gather_evidence',\n  repo_owner: 'octocat',\n  repo_name: 'Hello-World',\n  pr_number: 42,\n  user_request: 'Summarize the changes and risks so I can decide whether to open an issue or a PR.',\n  fast_mode: true,\n  approve_publish: false,\n  github_token: '',\n  ollama_host: 'http://127.0.0.1:11434',\n  agent_model: 'qwen2.5:7b'\n} }];\n"
+      }
+    },
+    {
+      "id": "node-webhook",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        0,
+        320
+      ],
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "github-assistant",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "webhookId": "github-multi-agent-assistant"
+    },
+    {
+      "id": "node-prepare-request",
+      "name": "Prepare GitHub Request",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        220,
+        320
+      ],
+      "parameters": {
+        "jsCode": "const input = $input.first().json;\nconst body = (input.body && typeof input.body === 'object') ? input.body : input;\n\nconst action = String(body.action || '').trim() || 'review_changes';\nconst allowed = new Set(['no_action','gather_evidence', 'review_changes', 'draft_issue', 'draft_pr', 'improve_issue', 'improve_pr']);\nif (!allowed.has(action)) {\n  throw new Error('Unsupported action. Use one of: no_action, gather_evidence, review_changes, draft_issue, draft_pr, improve_issue, improve_pr');\n}\n\nconst owner = body.repo_owner || body.owner;\nconst repo = body.repo_name || body.repo;\nif (!owner || !repo) throw new Error('repo_owner and repo_name are required.');\n\nconst approvePublish = body.approve_publish === true || body.approve_publish === 'true';\nconst confirmArtifact = body.confirm_artifact === true || body.confirm_artifact === 'true';\nconst githubToken = body.github_token || '';\nconst ollamaHost = body.ollama_host || 'http://127.0.0.1:11434';\nconst agentModel = body.agent_model || 'qwen2.5:7b';\nconst fastMode = body.fast_mode !== false && body.fast_mode !== 'false';\nconst maxChangedFiles = Math.max(1, Number(body.max_changed_files || (fastMode ? 8 : 15)));\nconst maxPatchChars = Math.max(400, Number(body.max_patch_chars || (fastMode ? 1200 : 2800)));\nconst baseUrl = `https://api.github.com/repos/${owner}/${repo}`;\nconst automationMarker = '<!-- generated-by-n8n-github-assistant -->';\n\nconst authHeader = githubToken ? (githubToken.startsWith('github_pat_') ? `Bearer ${githubToken}` : `token ${githubToken}`) : '';\n\nasync function githubGet(path) {\n  const url = `${baseUrl}${path}`;\n  const headers = { Accept: 'application/vnd.github+json', 'User-Agent': 'n8n-github-assistant' };\n  if (authHeader) headers.Authorization = authHeader;\n\n  try {\n    return await this.helpers.httpRequest({ method: 'GET', url, headers, json: true });\n  } catch (error) {\n    const statusCode = error?.statusCode;\n    const responseBody = error?.response?.body;\n\n    if (statusCode === 404) {\n      throw new Error(\n        `GitHub returned 404 for ${url}. This usually means the repo/PR does not exist, OR the repo is private and you did not provide a token with access.`\n      );\n    }\n\n    throw new Error(\n      `GitHub request failed (${statusCode || 'unknown'}) for ${url}: ${error?.message || 'request failed'}\n${JSON.stringify(responseBody || {}, null, 2)}`\n    );\n  }\n}\n\nfunction compactText(value, max = 12000) {\n  const text = typeof value === 'string' ? value : JSON.stringify(value);\n  return text.length > max ? `${text.slice(0, max)}\n...<truncated>` : text;\n}\n\nconst normalized = {\n  action,\n  owner,\n  repo,\n  repo_full_name: `${owner}/${repo}`,\n  approve_publish: approvePublish,\n  confirm_artifact: confirmArtifact,\n  github_token: githubToken,\n  github_token_present: Boolean(githubToken),\n  ollama_host: ollamaHost,\n  agent_model: agentModel,\n  fast_mode: fastMode,\n  max_changed_files: maxChangedFiles,\n  max_patch_chars: maxPatchChars,\n  user_request: body.user_request || body.prompt || '',\n  metadata: body.metadata || {},\n  source: body,\n  agent_outputs: {},\n  resolved_action: action,\n  decision: null,\n  loop_guard: { should_stop: false, reasons: [], marker: automationMarker, label: 'ai-generated' }\n};\n\n\nif (action === 'review_changes' || action === 'improve_pr') {\n  const prNumber = Number(body.pr_number);\n  if (!Number.isInteger(prNumber) || prNumber <= 0) throw new Error('pr_number is required for review_changes and improve_pr.');\n  const pr = await githubGet(`/pulls/${prNumber}`);\n  const files = await githubGet(`/pulls/${prNumber}/files?per_page=100`);\n  const rankedFiles = files\n    .map((file) => ({\n      filename: file.filename,\n      status: file.status,\n      additions: file.additions,\n      deletions: file.deletions,\n      changes: file.changes,\n      patch: compactText(file.patch || '', maxPatchChars),\n    }))\n    .sort((a, b) => (b.changes || 0) - (a.changes || 0));\n\n  normalized.pr_number = prNumber;\n  normalized.pull_request = {\n    number: pr.number,\n    title: pr.title,\n    body: compactText(pr.body || '', 3000),\n    state: pr.state,\n    draft: Boolean(pr.draft),\n    base: pr.base?.ref,\n    head: pr.head?.ref,\n    author: pr.user?.login || '',\n    html_url: pr.html_url,\n    additions: pr.additions,\n    deletions: pr.deletions,\n    changed_files: pr.changed_files,\n  };\n  normalized.diff_files = rankedFiles.slice(0, maxChangedFiles);\n  normalized.diff_overview = {\n    included_files: normalized.diff_files.length,\n    omitted_files: Math.max(0, rankedFiles.length - normalized.diff_files.length),\n    omitted_filenames: rankedFiles.slice(maxChangedFiles).map((file) => file.filename).slice(0, 20),\n  };\n}\n\nif (action === 'gather_evidence') {\n  // Target selection (human-provided):\n  // - PR: pr_number\n  // - Compare/range: base + head (or from + to)\n  // - Single commit: commit (or commit_sha)\n  const prNumber = body.pr_number != null ? Number(body.pr_number) : null;\n  const commitSha = String(body.commit || body.commit_sha || '').trim();\n  const baseRef = String(body.base || body.from || body.base_ref || '').trim();\n  const headRef = String(body.head || body.to || body.head_ref || body.branch || body.ref || '').trim();\n\n  if (prNumber && Number.isInteger(prNumber) && prNumber > 0) {\n    const pr = await githubGet(`/pulls/${prNumber}`);\n    const files = await githubGet(`/pulls/${prNumber}/files?per_page=100`);\n    const rankedFiles = files\n      .map((file) => ({\n        filename: file.filename,\n        status: file.status,\n        additions: file.additions,\n        deletions: file.deletions,\n        changes: file.changes,\n        patch: compactText(file.patch || '', maxPatchChars),\n      }))\n      .sort((a, b) => (b.changes || 0) - (a.changes || 0));\n\n    normalized.pr_number = prNumber;\n    normalized.pull_request = {\n      number: pr.number,\n      title: pr.title,\n      body: compactText(pr.body || '', 3000),\n      state: pr.state,\n      draft: Boolean(pr.draft),\n      base: pr.base?.ref,\n      head: pr.head?.ref,\n      author: pr.user?.login || '',\n      html_url: pr.html_url,\n      additions: pr.additions,\n      deletions: pr.deletions,\n      changed_files: pr.changed_files,\n    };\n    normalized.diff_files = rankedFiles.slice(0, maxChangedFiles);\n    normalized.diff_overview = {\n      included_files: normalized.diff_files.length,\n      omitted_files: Math.max(0, rankedFiles.length - normalized.diff_files.length),\n      omitted_filenames: rankedFiles.slice(maxChangedFiles).map((file) => file.filename).slice(0, 20),\n    };\n  } else if (commitSha) {\n    const commit = await githubGet(`/commits/${encodeURIComponent(commitSha)}`);\n    const files = Array.isArray(commit.files) ? commit.files : [];\n    const rankedFiles = files\n      .map((file) => ({\n        filename: file.filename,\n        status: file.status,\n        additions: file.additions,\n        deletions: file.deletions,\n        changes: file.changes,\n        patch: compactText(file.patch || '', maxPatchChars),\n      }))\n      .sort((a, b) => (b.changes || 0) - (a.changes || 0));\n\n    normalized.commit = {\n      sha: commit.sha,\n      message: commit.commit?.message || '',\n      author: commit.author?.login || commit.commit?.author?.name || '',\n      html_url: commit.html_url,\n      stats: commit.stats || {},\n    };\n    normalized.diff_files = rankedFiles.slice(0, maxChangedFiles);\n    normalized.diff_overview = {\n      included_files: normalized.diff_files.length,\n      omitted_files: Math.max(0, rankedFiles.length - normalized.diff_files.length),\n      omitted_filenames: rankedFiles.slice(maxChangedFiles).map((file) => file.filename).slice(0, 20),\n    };\n  } else {\n    // Compare / range / branch. If nothing is provided, default to the repo default branch (usually main).\n    const repoInfo = await githubGet('');\n    const defaultBranch = repoInfo.default_branch || 'main';\n    const head = headRef || defaultBranch;\n    const base = baseRef || `${head}~1`;\n\n    let compare = null;\n    try {\n      compare = await githubGet(`/compare/${encodeURIComponent(base)}...${encodeURIComponent(head)}`);\n    } catch (e) {\n      // Fallback: if compare fails (e.g. repo has only 1 commit), analyze the single commit at head.\n      const commit = await githubGet(`/commits/${encodeURIComponent(head)}`);\n      const files = Array.isArray(commit.files) ? commit.files : [];\n      const rankedFiles = files\n        .map((file) => ({\n          filename: file.filename,\n          status: file.status,\n          additions: file.additions,\n          deletions: file.deletions,\n          changes: file.changes,\n          patch: compactText(file.patch || '', maxPatchChars),\n        }))\n        .sort((a, b) => (b.changes || 0) - (a.changes || 0));\n\n      normalized.compare = {\n        base,\n        head,\n        html_url: '',\n        status: 'fallback_single_commit',\n        ahead_by: 0,\n        behind_by: 0,\n        total_commits: 1,\n        merge_base_sha: '',\n        commits_sample: [{ sha: commit.sha, message: commit.commit?.message || '' }],\n      };\n\n      normalized.commit = {\n        sha: commit.sha,\n        message: commit.commit?.message || '',\n        author: commit.author?.login || commit.commit?.author?.name || '',\n        html_url: commit.html_url,\n        stats: commit.stats || {},\n      };\n\n      normalized.diff_files = rankedFiles.slice(0, maxChangedFiles);\n      normalized.diff_overview = {\n        included_files: normalized.diff_files.length,\n        omitted_files: Math.max(0, rankedFiles.length - normalized.diff_files.length),\n        omitted_filenames: rankedFiles.slice(maxChangedFiles).map((file) => file.filename).slice(0, 20),\n      };\n    }\n\n    if (compare) {\n      const files = Array.isArray(compare.files) ? compare.files : [];\n      const rankedFiles = files\n        .map((file) => ({\n          filename: file.filename,\n          status: file.status,\n          additions: file.additions,\n          deletions: file.deletions,\n          changes: file.changes,\n          patch: compactText(file.patch || '', maxPatchChars),\n        }))\n        .sort((a, b) => (b.changes || 0) - (a.changes || 0));\n\n      normalized.compare = {\n        base,\n        head,\n        html_url: compare.html_url || '',\n        status: compare.status || '',\n        ahead_by: compare.ahead_by,\n        behind_by: compare.behind_by,\n        total_commits: compare.total_commits,\n        merge_base_sha: compare.merge_base_commit?.sha || '',\n        commits_sample: Array.isArray(compare.commits)\n          ? compare.commits.slice(0, 20).map((c) => ({ sha: c.sha, message: c.commit?.message || '' }))\n          : [],\n      };\n\n      normalized.diff_files = rankedFiles.slice(0, maxChangedFiles);\n      normalized.diff_overview = {\n        included_files: normalized.diff_files.length,\n        omitted_files: Math.max(0, rankedFiles.length - normalized.diff_files.length),\n        omitted_filenames: rankedFiles.slice(maxChangedFiles).map((file) => file.filename).slice(0, 20),\n      };\n    }\n  }\n}\n\n\nif (action === 'improve_issue') {\n  const issueNumber = Number(body.issue_number);\n  if (!Number.isInteger(issueNumber) || issueNumber <= 0) throw new Error('issue_number is required for improve_issue.');\n  const issue = await githubGet(`/issues/${issueNumber}`);\n  normalized.issue_number = issueNumber;\n  normalized.issue = { number: issue.number, title: issue.title, body: compactText(issue.body || '', 5000), state: issue.state, labels: (issue.labels || []).map((label) => typeof label === 'string' ? label : label.name), assignees: (issue.assignees || []).map((user) => user.login), html_url: issue.html_url };\n}\n\nif (action === 'draft_issue') {\n  normalized.issue_seed = { title: body.title || '', problem_statement: compactText(body.problem_statement || body.summary || '', 3000), context: compactText(body.context || '', 4000), acceptance_criteria: body.acceptance_criteria || [], labels: body.labels || [], assignees: body.assignees || [] };\n}\n\nif (action === 'draft_pr') {\n  normalized.pull_request_seed = { title: body.title || '', summary: compactText(body.summary || body.problem_statement || '', 3000), context: compactText(body.context || '', 4000), acceptance_criteria: body.acceptance_criteria || [], labels: body.labels || [], reviewers: body.reviewers || [], base: body.base || 'main', head: body.head || '', linked_issues: body.linked_issues || [] };\n}\n\nreturn [{ json: normalized }];"
+      }
+    },
+    {
+      "id": "node-analyzer",
+      "name": "Analyzer Assistant",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        470,
+        320
+      ],
+      "parameters": {
+        "jsCode": "const input = $input.first().json;\nconst fastMode = input.fast_mode !== false;\n\n// For gather_evidence, avoid slow local inference. Build a deterministic evidence summary.\nif (input.action === 'gather_evidence') {\n  const files = Array.isArray(input.diff_files) ? input.diff_files : [];\n  const totalChanges = files.reduce((sum, f) => sum + (Number(f.changes) || 0), 0);\n  const totalAdditions = files.reduce((sum, f) => sum + (Number(f.additions) || 0), 0);\n  const totalDeletions = files.reduce((sum, f) => sum + (Number(f.deletions) || 0), 0);\n\n  const filenames = files.map((f) => String(f.filename || '')).filter(Boolean);\n  const topPaths = filenames.slice(0, 12);\n\n  const touchedTests = filenames.some((f) => /(^|\\/)(__tests__|test|tests)\\//i.test(f) || /(\\.test\\.|\\.spec\\.)/i.test(f));\n  const touchedMigrations = filenames.some((f) => /(migrations|schema|db|\\.sql)/i.test(f));\n  const touchedAuth = filenames.some((f) => /(auth|oauth|jwt|session|crypto|security)/i.test(f));\n  const touchedDeps = filenames.some((f) => /(package\\.json|package-lock\\.json|pnpm-lock\\.yaml|yarn\\.lock|requirements\\.txt|poetry\\.lock|Pipfile\\.lock)/i.test(f));\n\n  let risk = 'low';\n  if (totalChanges > 600 || touchedDeps) risk = 'medium';\n  if (totalChanges > 1500 || touchedMigrations || touchedAuth) risk = 'high';\n\n  const target = input.pull_request\n    ? `PR #${input.pull_request.number}: ${input.pull_request.title}`\n    : input.commit\n      ? `Commit ${input.commit.sha.slice(0, 8)}: ${(input.commit.message || '').split(/\\r?\\n/)[0]}`\n      : input.compare\n        ? `Compare ${input.compare.base}...${input.compare.head}`\n        : 'Repository changes';\n\n  const behavior = [\n    `Target: ${target}`,\n    `Files touched (top): ${topPaths.join(', ') || 'none'}`,\n    `Net change: +${totalAdditions} / -${totalDeletions} across ${filenames.length} files`,\n    touchedTests ? 'Tests appear to be touched.' : 'No obvious test files detected in the change list.',\n    touchedMigrations ? 'DB/schema/migration files detected.' : null,\n    touchedAuth ? 'Auth/security-adjacent files detected.' : null,\n    touchedDeps ? 'Dependency/lockfile changes detected.' : null,\n  ].filter(Boolean).join('\\n');\n\n  const analyzer = {\n    objective: (input.user_request || '').trim() || 'Summarize evidence for a human decision.',\n    files_affected: topPaths,\n    behavior_change: behavior,\n    risk_level: risk,\n    key_points: [],\n    missing_information: [],\n  };\n\n  return [{ json: { ...input, agent_outputs: { ...input.agent_outputs, analyzer } } }];\n}\n\n// Non-evidence actions still use the model.\nconst ollamaUrl = `${input.ollama_host.replace(/\\/$/, '')}/api/chat`;\nfunction parseJson(text) { if (!text) return {}; try { return JSON.parse(text); } catch (e) {} const m = text.match(/```(?:json)?\\s*([\\s\\S]*?)```/i); if (m) { try { return JSON.parse(m[1].trim()); } catch (e) {} } return {}; }\nconst context = JSON.stringify({ action: input.action, repository: input.repo_full_name, user_request: input.user_request, verifier: input.agent_outputs?.verifier, issue_seed: input.issue_seed, pull_request_seed: input.pull_request_seed, issue: input.issue, pull_request: input.pull_request, diff_files: input.diff_files, diff_overview: input.diff_overview, metadata: input.metadata, fast_mode: fastMode });\nconst data = await this.helpers.httpRequest({ method: 'POST', url: ollamaUrl, headers: { 'Content-Type': 'application/json' }, body: { model: input.agent_model, messages: [{ role: 'system', content: 'You are the Repository Analyst. Use the verifier output first, then summarize the code change evidence for a human decision. Return JSON only with keys: objective, files_affected, behavior_change, risk_level, key_points, missing_information. risk_level must be one of low, medium, high.' }, { role: 'user', content: context }], stream: false, format: 'json', options: { temperature: 0.1, num_predict: fastMode ? 500 : 800, num_ctx: fastMode ? 8192 : 16384 } }, json: true });\nconst analyzer = parseJson(data.message?.content || '{}');\nreturn [{ json: { ...input, agent_outputs: { ...input.agent_outputs, analyzer } } }];\n"
+      }
+    },
+    {
+      "id": "node-verifier",
+      "name": "Verifier Assistant",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        470,
+        140
+      ],
+      "parameters": {
+        "jsCode": "const input = $input.first().json;\nconst fastMode = input.fast_mode !== false;\nconst ollamaUrl = `${input.ollama_host.replace(/\\/$/, '')}/api/chat`;\nconst loopGuard = input.loop_guard || { should_stop: false, reasons: [], marker: '<!-- generated-by-n8n-github-assistant -->' };\n\nfunction parseJson(text) {\n  if (!text) return {};\n  try { return JSON.parse(text); } catch (e) {}\n  const m = text.match(/```(?:json)?\\s*([\\s\\S]*?)```/i);\n  if (m) {\n    try { return JSON.parse(m[1].trim()); } catch (e) {}\n  }\n  return {};\n}\nfunction maybeLogin(value) { return typeof value === 'string' ? value.trim().toLowerCase() : ''; }\nfunction hasAutomationMarker(value) { return typeof value === 'string' && value.includes(loopGuard.marker); }\n\nconst reasons = [];\nconst senderLogin = maybeLogin(input.source?.sender?.login || input.source?.sender_login);\nconst issueAuthor = maybeLogin(input.issue?.author || input.source?.issue?.user?.login);\nconst prAuthor = maybeLogin(input.pull_request?.author || input.source?.pull_request?.user?.login);\n\nif (senderLogin && (senderLogin.includes('[bot]') || senderLogin.includes('n8n'))) reasons.push(`sender ${senderLogin} is an automation account`);\nif (issueAuthor && (issueAuthor.includes('[bot]') || issueAuthor.includes('n8n'))) reasons.push(`issue author ${issueAuthor} is an automation account`);\nif (prAuthor && (prAuthor.includes('[bot]') || prAuthor.includes('n8n'))) reasons.push(`pull request author ${prAuthor} is an automation account`);\nif (hasAutomationMarker(input.issue?.body) || hasAutomationMarker(input.pull_request?.body) || hasAutomationMarker(input.source?.issue?.body) || hasAutomationMarker(input.source?.pull_request?.body)) reasons.push('artifact already contains the automation marker');\n\nif (reasons.length > 0) {\n  const verifier = { verification_status: 'blocked', verified_facts: [], assumptions: [], missing_information: [], blockers: reasons, next_step: `Loop guard stopped this run: ${reasons.join('; ')}.` };\n  return [{ json: { ...input, loop_guard: { ...loopGuard, should_stop: true, reasons }, agent_outputs: { ...input.agent_outputs, verifier } } }];\n}\n\n// Evidence-only runs should be fast and not blocked by slow local inference.\nif (input.action === 'gather_evidence' && !input.approve_publish) {\n  const verifier = {\n    verification_status: 'pass',\n    verified_facts: ['Loop guard passed. Evidence run only.'],\n    assumptions: [],\n    missing_information: [],\n    blockers: [],\n    next_step: \"Review the evidence output and choose action 'draft_issue' or 'draft_pr'.\",\n  };\n  return [{ json: { ...input, agent_outputs: { ...input.agent_outputs, verifier } } }];\n}\n\nconst filesAffected = Array.isArray(input.diff_files)\n  ? input.diff_files.map((f) => ({ filename: f.filename, status: f.status, changes: f.changes, additions: f.additions, deletions: f.deletions }))\n  : [];\n\nconst context = JSON.stringify({\n  action: input.action,\n  repository: input.repo_full_name,\n  user_request: input.user_request,\n  target: {\n    pr_number: input.pr_number || null,\n    commit: input.commit?.sha || null,\n    compare: input.compare ? { base: input.compare.base, head: input.compare.head, total_commits: input.compare.total_commits } : null,\n  },\n  issue: input.issue ? { number: input.issue.number, title: input.issue.title, state: input.issue.state } : null,\n  pull_request: input.pull_request ? { number: input.pull_request.number, title: input.pull_request.title, state: input.pull_request.state, draft: input.pull_request.draft, base: input.pull_request.base, head: input.pull_request.head, url: input.pull_request.html_url } : null,\n  files_affected: filesAffected,\n  diff_overview: input.diff_overview || null,\n  metadata: input.metadata,\n});\n\nconst model = input.verifier_model || input.agent_model;\nconst data = await this.helpers.httpRequest({\n  method: 'POST',\n  url: ollamaUrl,\n  headers: { 'Content-Type': 'application/json' },\n  body: {\n    model,\n    messages: [\n      { role: 'system', content: 'You are the Verifier Assistant. Verify whether the request has enough grounded context to proceed safely. Return JSON only with keys: verification_status, verified_facts, assumptions, missing_information, blockers, next_step. verification_status must be one of pass, caution, blocked.' },\n      { role: 'user', content: context },\n    ],\n    stream: false,\n    format: 'json',\n    options: {\n      temperature: 0.1,\n      num_predict: fastMode ? 220 : 350,\n      num_ctx: fastMode ? 4096 : 8192,\n    },\n  },\n  json: true,\n});\n\nconst verifier = parseJson(data.message?.content || '{}');\nreturn [{ json: { ...input, agent_outputs: { ...input.agent_outputs, verifier } } }];\n"
+      }
+    },
+    {
+      "id": "node-reviewer",
+      "name": "Reviewer Assistant",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        720,
+        320
+      ],
+      "parameters": {
+        "jsCode": "const input = $input.first().json;\nconst fastMode = input.fast_mode !== false;\n\n// For gather_evidence, avoid slow local inference. Provide a lightweight review summary.\nif (input.action === 'gather_evidence') {\n  const analyzer = input.agent_outputs?.analyzer || {};\n  const risk = analyzer.risk_level || '';\n\n  const reviewer = {\n    review_summary: 'Evidence gathered. No automated deep review performed in evidence mode.',\n    risk_level: risk,\n    blocking_concerns: [],\n    non_blocking_concerns: [],\n    suggested_checks: [\n      'Confirm behavior changes against requirements.',\n      'Run unit/integration tests for touched areas.',\n      'Check for missing docs/rollout notes if behavior changes are user-visible.',\n    ],\n    tone_guidance: 'Use neutral, factual language when drafting the issue/PR.',\n  };\n\n  return [{ json: { ...input, agent_outputs: { ...input.agent_outputs, reviewer } } }];\n}\n\nconst ollamaUrl = `${input.ollama_host.replace(/\\/$/, '')}/api/chat`;\nfunction parseJson(text) { if (!text) return {}; try { return JSON.parse(text); } catch (e) {} const m = text.match(/```(?:json)?\\s*([\\s\\S]*?)```/i); if (m) { try { return JSON.parse(m[1].trim()); } catch (e) {} } return {}; }\nconst context = JSON.stringify({ action: input.action, repository: input.repo_full_name, user_request: input.user_request, issue_seed: input.issue_seed, pull_request_seed: input.pull_request_seed, issue: input.issue, pull_request: input.pull_request, diff_files: input.diff_files, diff_overview: input.diff_overview, metadata: input.metadata, analyzer: input.agent_outputs?.analyzer, fast_mode: fastMode });\nconst data = await this.helpers.httpRequest({ method: 'POST', url: ollamaUrl, headers: { 'Content-Type': 'application/json' }, body: { model: input.agent_model, messages: [{ role: 'system', content: 'You are the GitHub Review Agent. Challenge the analyst framing. Return JSON only with keys: review_summary, risk_level, blocking_concerns, non_blocking_concerns, suggested_checks, tone_guidance. risk_level must be one of low, medium, high.' }, { role: 'user', content: context }], stream: false, format: 'json', options: { temperature: 0.1, num_predict: fastMode ? 500 : 800, num_ctx: fastMode ? 8192 : 16384 } }, json: true });\nconst reviewer = parseJson(data.message?.content || '{}');\nreturn [{ json: { ...input, agent_outputs: { ...input.agent_outputs, reviewer } } }];\n"
+      }
+    },
+    {
+      "id": "node-decision",
+      "name": "Artifact Decision Assistant",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        970,
+        320
+      ],
+      "parameters": {
+        "jsCode": "const input = $input.first().json;\n\n// Human choice only: issue vs PR must be selected explicitly.\nconst allowed = new Set(['gather_evidence', 'review_changes', 'draft_issue', 'draft_pr', 'improve_issue', 'improve_pr']);\nif (!allowed.has(input.action)) {\n  throw new Error(\"Choose an artifact type explicitly. Use action 'draft_issue' or 'draft_pr' (or improve_issue / improve_pr / review_changes).\" );\n}\n\nlet recommendation = 'no_action';\nif (input.action === 'draft_issue' || input.action === 'improve_issue') recommendation = 'issue';\nif (input.action === 'draft_pr' || input.action === 'improve_pr') recommendation = 'pull_request';\n\nreturn [{\n  json: {\n    ...input,\n    decision: {\n      recommendation,\n      rationale: 'Artifact type selected explicitly via action.',\n      confidence: 'high',\n      next_action: input.action,\n    },\n    resolved_action: input.action,\n  }\n}];\n"
+      }
+    },
+    {
+      "id": "node-route-artifact",
+      "name": "Route Artifact Type",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2,
+      "position": [
+        1220,
+        320
+      ],
+      "parameters": {
+        "mode": "expression",
+        "output": "={{ (($json.resolved_action === 'draft_issue' || $json.resolved_action === 'draft_pr') && !$json.confirm_artifact) ? 2 : ({ draft_issue: 0, draft_pr: 1, review_changes: 3, improve_issue: 4, improve_pr: 5, gather_evidence: 2, no_action: 2 })[$json.resolved_action] ?? 2 }}"
+      }
+    },
+    {
+      "id": "node-issue-drafter",
+      "name": "Issue Drafter Assistant",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1490,
+        180
+      ],
+      "parameters": {
+        "jsCode": "const input = $input.first().json;\nconst fastMode = input.fast_mode !== false;\nconst ollamaUrl = `${input.ollama_host.replace(/\\/$/, '')}/api/chat`;\nconst marker = input.loop_guard?.marker || '<!-- generated-by-n8n-github-assistant -->';\nfunction parseJson(text) { if (!text) return {}; try { return JSON.parse(text); } catch (e) {} const m = text.match(/```(?:json)?\\s*([\\s\\S]*?)```/i); if (m) { try { return JSON.parse(m[1].trim()); } catch (e) {} } return {}; }\nconst seed = input.issue_seed || input.decision?.issue_seed || input.decision_seed || {};\nconst context = JSON.stringify({ repository: input.repo_full_name, action: input.resolved_action, issue_seed: seed, existing_issue: input.issue, analyzer: input.agent_outputs?.analyzer, reviewer: input.agent_outputs?.reviewer, decision: input.decision, user_request: input.user_request });\nconst data = await this.helpers.httpRequest({ method: 'POST', url: ollamaUrl, headers: { 'Content-Type': 'application/json' }, body: { model: input.agent_model, messages: [{ role: 'system', content: 'You are the Issue Drafter Assistant. Produce concise publish-ready issue content. Return JSON only with keys: title, body_markdown, labels, assignees, publish_summary, approval_notes.' }, { role: 'user', content: context }], stream: false, format: 'json', options: { temperature: 0.1, num_predict: fastMode ? 900 : 1400, num_ctx: fastMode ? 8192 : 16384 } }, json: true });\nconst issueDraft = parseJson(data.message?.content || '{}');\nconst body = `${(issueDraft.body_markdown || '').trim()}\n\n${marker}`.trim();\nreturn [{ json: { ...input, resolved_action: input.resolved_action || 'draft_issue', agent_outputs: { ...input.agent_outputs, draft: { ...issueDraft, body_markdown: body } } } }];\n"
+      }
+    },
+    {
+      "id": "node-pr-drafter",
+      "name": "PR Drafter Assistant",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1490,
+        460
+      ],
+      "parameters": {
+        "jsCode": "const input = $input.first().json;\nconst fastMode = input.fast_mode !== false;\nconst ollamaUrl = `${input.ollama_host.replace(/\\/$/, '')}/api/chat`;\nconst marker = input.loop_guard?.marker || '<!-- generated-by-n8n-github-assistant -->';\nfunction parseJson(text) { if (!text) return {}; try { return JSON.parse(text); } catch (e) {} const m = text.match(/```(?:json)?\\s*([\\s\\S]*?)```/i); if (m) { try { return JSON.parse(m[1].trim()); } catch (e) {} } return {}; }\nif (input.resolved_action === 'review_changes') {\n  const context = JSON.stringify({ repository: input.repo_full_name, action: input.resolved_action, pull_request: input.pull_request, diff_files: input.diff_files, diff_overview: input.diff_overview, analyzer: input.agent_outputs?.analyzer, reviewer: input.agent_outputs?.reviewer });\n  const data = await this.helpers.httpRequest({ method: 'POST', url: ollamaUrl, headers: { 'Content-Type': 'application/json' }, body: { model: input.agent_model, messages: [{ role: 'system', content: 'You are the PR Drafter Assistant. For review_changes, return JSON only with keys: review_summary, risk_level, blocking_findings, non_blocking_findings, suggested_pr_comment, suggested_follow_up_tests.' }, { role: 'user', content: context }], stream: false, format: 'json', options: { temperature: 0.1, num_predict: fastMode ? 900 : 1400, num_ctx: fastMode ? 8192 : 16384 } }, json: true });\n  const prDraft = parseJson(data.message?.content || '{}');\n  return [{ json: { ...input, agent_outputs: { ...input.agent_outputs, draft: prDraft } } }];\n}\nconst seed = input.pull_request_seed || input.decision?.pull_request_seed || input.decision_seed || {};\nconst context = JSON.stringify({ repository: input.repo_full_name, action: input.resolved_action, pull_request_seed: seed, existing_pull_request: input.pull_request, analyzer: input.agent_outputs?.analyzer, reviewer: input.agent_outputs?.reviewer, decision: input.decision, user_request: input.user_request });\nconst data = await this.helpers.httpRequest({ method: 'POST', url: ollamaUrl, headers: { 'Content-Type': 'application/json' }, body: { model: input.agent_model, messages: [{ role: 'system', content: 'You are the PR Drafter Assistant. Produce concise publish-ready pull request content. Return JSON only with keys: title, body_markdown, base, head, draft, labels, reviewers, publish_summary, approval_notes.' }, { role: 'user', content: context }], stream: false, format: 'json', options: { temperature: 0.1, num_predict: fastMode ? 900 : 1400, num_ctx: fastMode ? 8192 : 16384 } }, json: true });\nconst prDraft = parseJson(data.message?.content || '{}');\nconst body = `${(prDraft.body_markdown || '').trim()}\n\n${marker}`.trim();\nreturn [{ json: { ...input, agent_outputs: { ...input.agent_outputs, draft: { ...prDraft, body_markdown: body } } } }];\n"
+      }
+    },
+    {
+      "id": "node-editor",
+      "name": "Editor Assistant",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1760,
+        320
+      ],
+      "parameters": {
+        "jsCode": "const input = $input.first().json;\nconst fastMode = input.fast_mode !== false;\nif (input.action === 'gather_evidence') {\n  return [{ json: { ...input, agent_outputs: { ...input.agent_outputs, editor: input.agent_outputs?.draft || {} } } }];\n}\nif (fastMode && !input.approve_publish) {\n  return [{ json: { ...input, agent_outputs: { ...input.agent_outputs, editor: input.agent_outputs?.draft || {} } } }];\n}\nconst ollamaUrl = `${input.ollama_host.replace(/\\/$/, '')}/api/chat`;\nfunction parseJson(text) { if (!text) return {}; try { return JSON.parse(text); } catch (e) {} const m = text.match(/```(?:json)?\\s*([\\s\\S]*?)```/i); if (m) { try { return JSON.parse(m[1].trim()); } catch (e) {} } return {}; }\nconst context = JSON.stringify({ action: input.resolved_action, repository: input.repo_full_name, draft: input.agent_outputs?.draft, analyzer: input.agent_outputs?.analyzer, reviewer: input.agent_outputs?.reviewer, decision: input.decision, fast_mode: fastMode });\nconst data = await this.helpers.httpRequest({ method: 'POST', url: ollamaUrl, headers: { 'Content-Type': 'application/json' }, body: { model: input.agent_model, messages: [{ role: 'system', content: 'You are the Final Editor. Tighten the draft, remove unsupported claims, and preserve only concrete content. Return the same JSON schema as the draft for this action.' }, { role: 'user', content: context }], stream: false, format: 'json', options: { temperature: 0.1, num_predict: fastMode ? 700 : 1100, num_ctx: fastMode ? 8192 : 16384 } }, json: true });\nconst editor = parseJson(data.message?.content || '{}');\nreturn [{ json: { ...input, agent_outputs: { ...input.agent_outputs, editor } } }];"
+      }
+    },
+    {
+      "id": "node-build-response",
+      "name": "Build Draft Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2030,
+        320
+      ],
+      "parameters": {
+        "jsCode": "const input = $input.first().json;\nconst finalDraft = input.agent_outputs.editor || input.agent_outputs.draft || {};\nconst action = input.resolved_action || input.action;\nconst marker = input.loop_guard?.marker || '<!-- generated-by-n8n-github-assistant -->';\nconst ensureMarker = (value) => {\n  const text = (typeof value === 'string' ? value : '').trim();\n  return text.includes(marker) ? text : `${text}\n\n${marker}`.trim();\n};\n\nconst draftWithMarker = {\n  ...finalDraft,\n  body_markdown: ensureMarker(finalDraft.body_markdown || '')\n};\n\nconst filesAffected = Array.isArray(input.diff_files) ? input.diff_files.map((f) => ({ filename: f.filename, status: f.status, additions: f.additions, deletions: f.deletions, changes: f.changes })) : [];\nconst evidence = {\n  repository: input.repo_full_name,\n  pr: input.pull_request ? { number: input.pull_request.number, title: input.pull_request.title, url: input.pull_request.html_url, additions: input.pull_request.additions, deletions: input.pull_request.deletions, changed_files: input.pull_request.changed_files } : null,\n  files_affected: filesAffected,\n  diff_overview: input.diff_overview || null,\n  behavior_change: input.agent_outputs?.analyzer?.behavior_change || '',\n  risk_level: input.agent_outputs?.reviewer?.risk_level || input.agent_outputs?.analyzer?.risk_level || '',\n  review_summary: input.agent_outputs?.reviewer?.review_summary || ''\n};\n\nconst response = {\n  action: input.action,\n  resolved_action: action,\n  repository: input.repo_full_name,\n  owner: input.owner,\n  repo: input.repo,\n  approve_publish: input.approve_publish,\n  github_token_present: input.github_token_present,\n  github_token: input.github_token,\n  published: false,\n  publish_ready: false,\n  approval_required: true,\n  next_step: 'Review the draft output. Re-submit the same payload with approve_publish=true to publish changes to GitHub.',\n  draft: draftWithMarker,\n  decision: input.decision || null,\n  agent_outputs: input.agent_outputs,\n  loop_guard: input.loop_guard || null,\n  evidence,\n  ui: Boolean(input.source?.ui)\n};\n\nconst verificationStatus = input.agent_outputs?.verifier?.verification_status || 'pass';\nconst needsConfirm = (action === 'draft_issue' || action === 'draft_pr') && !input.confirm_artifact;\nif (needsConfirm) {\n  response.publish_ready = false;\n  response.approval_required = false;\n  response.next_step = \"Evidence gathered. Choose your path by re-running with action 'draft_issue' or 'draft_pr' AND confirm_artifact=true.\";\n  return [{ json: response }];\n}\n\n\nif (verificationStatus === 'blocked') {\n  response.approval_required = false;\n  response.publish_ready = false;\n  response.next_step = input.agent_outputs?.verifier?.next_step || 'Fix the blockers reported by the verifier before drafting or publishing.';\n  return [{ json: response }];\n}\n\n\nif (action === 'no_action') {\n  response.publish_ready = false;\n  response.approval_required = false;\n  response.next_step = 'No action selected.';\n  return [{ json: response }];\n}\n\nif (action === 'gather_evidence') {\n  response.publish_ready = false;\n  response.approval_required = false;\n  response.next_step = \"Choose next: set action to 'draft_issue' or 'draft_pr' based on evidence (files_affected, behavior_change, risk_level).\";\n  return [{ json: response }];\n}\n\nif (action === 'review_changes') {\n  response.publish_ready = false;\n  response.review_target = { pr_number: input.pr_number, url: input.pull_request?.html_url || '' };\n  response.next_step = 'Share the suggested_pr_comment manually, or extend the workflow to post review comments after human approval.';\n  return [{ json: response }];\n}\n\nlet endpoint = '';\nlet method = '';\nlet payload = {};\n\nif (action === 'draft_issue') {\n  endpoint = `https://api.github.com/repos/${input.owner}/${input.repo}/issues`;\n  method = 'POST';\n  // Avoid labels here: non-existent labels can cause 422. Apply labels in a follow-up step.\n  payload = {\n    title: draftWithMarker.title || input.issue_seed?.title || input.decision?.issue_seed?.title || 'Draft issue',\n    body: draftWithMarker.body_markdown || '',\n    assignees: Array.isArray(draftWithMarker.assignees) ? draftWithMarker.assignees : []\n  };\n}\n\nif (action === 'improve_issue') {\n  endpoint = `https://api.github.com/repos/${input.owner}/${input.repo}/issues/${input.issue_number}`;\n  method = 'PATCH';\n  payload = {\n    title: draftWithMarker.title || input.issue?.title || 'Updated issue',\n    body: draftWithMarker.body_markdown || ensureMarker(input.issue?.body || '')\n  };\n}\n\nif (action === 'draft_pr') {\n  endpoint = `https://api.github.com/repos/${input.owner}/${input.repo}/pulls`;\n  method = 'POST';\n  payload = {\n    title: draftWithMarker.title || input.pull_request_seed?.title || input.decision?.pull_request_seed?.title || 'Draft pull request',\n    body: draftWithMarker.body_markdown || '',\n    base: draftWithMarker.base || input.pull_request_seed?.base || input.decision?.pull_request_seed?.base || 'main',\n    head: draftWithMarker.head || input.pull_request_seed?.head || input.decision?.pull_request_seed?.head || '',\n    draft: draftWithMarker.draft !== false\n  };\n}\n\nif (action === 'improve_pr') {\n  endpoint = `https://api.github.com/repos/${input.owner}/${input.repo}/pulls/${input.pr_number}`;\n  method = 'PATCH';\n  payload = {\n    title: draftWithMarker.title || input.pull_request?.title || 'Updated pull request',\n    body: draftWithMarker.body_markdown || ensureMarker(input.pull_request?.body || '')\n  };\n}\n\nresponse.publish_ready = Boolean(input.approve_publish && input.github_token_present && endpoint && method && verificationStatus !== 'blocked');\nresponse.publish_request = { endpoint, method, payload };\n\nif (input.approve_publish && !input.github_token_present) {\n  response.next_step = 'approve_publish was true, but no GitHub token was provided. Supply a valid token in github_token.';\n}\n\nif (action === 'draft_pr' && !payload.head) {\n  response.publish_ready = false;\n  response.next_step = 'Draft PR generation succeeded, but publishing requires a non-empty head branch.';\n}\n\nif (verificationStatus === 'caution') {\n  response.next_step = input.agent_outputs?.verifier?.next_step || 'The verifier raised cautions. Review them before publishing.';\n}\n\nreturn [{ json: response }];\n"
+      }
+    },
+    {
+      "id": "node-should-publish",
+      "name": "Should Publish?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        2280,
+        320
+      ],
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{ Boolean($json.publish_ready === true && $json.approve_publish === true && $json.publish_request && $json.publish_request.endpoint && $json.publish_request.method) }}",
+              "operation": "isTrue"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "node-publish",
+      "name": "Publish to GitHub",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2520,
+        220
+      ],
+      "parameters": {
+        "jsCode": "const input = $input.first().json;\nconst draft = input.draft || {};\nconst request = input.publish_request || {};\nconst token = input.github_token;\n\nif (!token) throw new Error('No GitHub token available for publish.');\nif (!request.endpoint || !request.method) {\n  return [{ json: { ...input, published: false, approval_required: false, next_step: 'Not publishing: no publish_request available. Run Build Draft Response first, and ensure approve_publish=true.' } }];\n}\nif (!input.owner || !input.repo) throw new Error('Missing owner/repo in execution context.');\n\n// GitHub expects different auth schemes depending on token type.\nconst authHeader = token.startsWith('github_pat_') ? `Bearer ${token}` : `token ${token}`;\n\nasync function githubRequest(url, method, body) {\n  try {\n    const result = await this.helpers.httpRequest({\n      method,\n      url,\n      headers: {\n        Accept: 'application/vnd.github+json',\n        Authorization: authHeader,\n        'Content-Type': 'application/json',\n        'User-Agent': 'n8n-github-assistant'\n      },\n      body,\n      json: true,\n    });\n    return { ok: true, result };\n  } catch (error) {\n    const statusCode = error?.statusCode;\n    const message = error?.message;\n    const responseBody = error?.response?.body;\n    return { ok: false, statusCode, message, responseBody, url, method };\n  }\n}\n\n// Preflight: show a clear error if the token can't write to the repo.\nconst owner = input.owner;\nconst repo = input.repo;\nconst repoInfoResp = await githubRequest(`https://api.github.com/repos/${owner}/${repo}`, 'GET');\nif (!repoInfoResp.ok) {\n  throw new Error(`GitHub repo access check failed (${repoInfoResp.statusCode || 'unknown'}): ${repoInfoResp.message || 'request failed'}\n${JSON.stringify(repoInfoResp.responseBody || {}, null, 2)}`);\n}\nconst repoInfo = repoInfoResp.result;\nconst canPush = Boolean(repoInfo?.permissions?.push);\nif (!canPush) {\n  throw new Error(`Token does not have write access to ${owner}/${repo}.\nRepo permissions: ${JSON.stringify(repoInfo?.permissions || {}, null, 2)}\nFix: use a repo you can write to, or create a token with the required repo permissions (and authorize SSO if this is an org repo).`);\n}\n\nconst primaryResp = await githubRequest(request.endpoint, request.method, request.payload);\nif (!primaryResp.ok) {\n  throw new Error(`GitHub publish failed (${primaryResp.statusCode || 'unknown'}): ${primaryResp.message || 'request failed'}\n${JSON.stringify(primaryResp.responseBody || {}, null, 2)}`);\n}\nconst primary = primaryResp.result;\n\nconst extras = [];\nasync function tryExtra(url, method, body) {\n  const resp = await githubRequest(url, method, body);\n  extras.push(resp.ok ? resp.result : { error: true, statusCode: resp.statusCode, message: resp.message, responseBody: resp.responseBody, url: resp.url, method: resp.method });\n}\n\nif ((input.resolved_action === 'draft_issue' || input.resolved_action === 'improve_issue') && Array.isArray(draft.labels) && draft.labels.length > 0) {\n  await tryExtra(`https://api.github.com/repos/${owner}/${repo}/issues/${primary.number}/labels`, 'POST', { labels: draft.labels });\n}\nif ((input.resolved_action === 'draft_pr' || input.resolved_action === 'improve_pr') && Array.isArray(draft.labels) && draft.labels.length > 0) {\n  await tryExtra(`https://api.github.com/repos/${owner}/${repo}/issues/${primary.number}/labels`, 'POST', { labels: draft.labels });\n}\nif ((input.resolved_action === 'draft_pr' || input.resolved_action === 'improve_pr') && Array.isArray(draft.reviewers) && draft.reviewers.length > 0) {\n  await tryExtra(`https://api.github.com/repos/${owner}/${repo}/pulls/${primary.number}/requested_reviewers`, 'POST', { reviewers: draft.reviewers });\n}\n\nreturn [{ json: { ...input, published: true, approval_required: false, next_step: 'GitHub publish completed.', github_result: primary, github_follow_up_results: extras } }];\n"
+      }
+    },
+    {
+      "id": "node-respond",
+      "name": "Respond to Webhook",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        2760,
+        320
+      ],
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ (() => { const o = { ...$json }; delete o.github_token; if (o.source && typeof o.source === 'object') delete o.source.github_token; return o; })() }}",
+        "options": {
+          "responseCode": 200
+        }
+      }
+    },
+    {
+      "id": "node-ui-webhook",
+      "name": "UI Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        0,
+        120
+      ],
+      "parameters": {
+        "httpMethod": "GET",
+        "path": "github-assistant-ui",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "webhookId": "github-assistant-ui"
+    },
+    {
+      "id": "node-ui-request-builder",
+      "name": "UI Request Builder",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        220,
+        120
+      ],
+      "parameters": {
+        "jsCode": "return [{ json: {\n  action: 'gather_evidence',\n  repo_owner: 'AlanJohnSudhan27',\n  repo_name: 'CS-5001-AI-Augmented-SE',\n  user_request: 'Summarize the changes and risks so I can decide whether to open an issue or a PR.',\n  fast_mode: true,\n  approve_publish: false,\n  github_token: '',\n  ollama_host: 'http://127.0.0.1:11434',\n  agent_model: 'qwen2.5:7b'\n} }];\n"
+      }
+    },
+    {
+      "id": "node-ui-mode",
+      "name": "UI Mode?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        2100,
+        120
+      ],
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{ $json.ui === true }}",
+              "operation": "isTrue"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "node-ui-render",
+      "name": "Render Decision UI",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2320,
+        120
+      ],
+      "parameters": {
+        "jsCode": "const j = $input.first().json;\nconst ev = j.evidence || {};\nconst files = Array.isArray(ev.files_affected) ? ev.files_affected : [];\nconst risk = (ev.risk_level || '').toLowerCase();\nconst riskColor = risk === 'high' ? '#b91c1c' : risk === 'medium' ? '#b45309' : '#065f46';\n\nfunction esc(s) {\n  return String(s || '')\n    .replace(/&/g, '&amp;')\n    .replace(/</g, '&lt;')\n    .replace(/>/g, '&gt;')\n    .replace(/\"/g, '&quot;')\n    .replace(/'/g, '&#39;');\n}\n\nconst rows = files.slice(0, 50).map((f) => {\n  return `<tr><td>${esc(f.filename)}</td><td>${esc(f.status)}</td><td style=\"text-align:right\">${esc(f.changes)}</td></tr>`;\n}).join('');\n\nconst repo = esc(j.repository || `${j.owner}/${j.repo}`);\nconst behavior = esc(ev.behavior_change || '');\nconst summary = esc(ev.review_summary || '');\n\n// Buttons submit back to the JSON webhook. (No token in UI.)\nconst hidden = `\n  <input type=\"hidden\" name=\"repo_owner\" value=\"${esc(j.owner)}\">\n  <input type=\"hidden\" name=\"repo_name\" value=\"${esc(j.repo)}\">`;\n\nconst html = `<!doctype html>\n<html><head>\n<meta charset=\"utf-8\" />\n<meta name=\"viewport\" content=\"width=device-width,initial-scale=1\" />\n<title>GitHub Assistant Evidence</title>\n<style>\n  body{font-family:ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Arial;max-width:980px;margin:24px auto;padding:0 16px;color:#111;}\n  .card{border:1px solid #e5e7eb;border-radius:12px;padding:16px;margin:12px 0;}\n  .row{display:flex;gap:12px;flex-wrap:wrap;align-items:center;}\n  .pill{display:inline-block;padding:4px 10px;border-radius:999px;background:#f3f4f6;font-size:12px;}\n  table{width:100%;border-collapse:collapse;font-size:13px;}\n  th,td{border-bottom:1px solid #eee;padding:8px 6px;text-align:left;vertical-align:top;}\n  pre{white-space:pre-wrap;background:#0b1020;color:#e5e7eb;padding:12px;border-radius:10px;overflow:auto;}\n  .btn{appearance:none;border:1px solid #111;background:#111;color:#fff;padding:10px 14px;border-radius:10px;cursor:pointer;font-weight:600;}\n  .btn.secondary{background:#fff;color:#111;}\n</style>\n</head><body>\n<h1>Evidence</h1>\n<div class=\"card\">\n  <div class=\"row\">\n    <span class=\"pill\">Repo: ${repo}</span>\n    <span class=\"pill\">Risk: <span style=\"color:${riskColor};font-weight:700\">${esc(ev.risk_level || 'unknown')}</span></span>\n  </div>\n</div>\n\n<div class=\"card\">\n  <h2 style=\"margin:0 0 8px\">Behavior Change</h2>\n  <pre>${behavior}</pre>\n</div>\n\n<div class=\"card\">\n  <h2 style=\"margin:0 0 8px\">Review Summary</h2>\n  <div>${summary || 'N/A'}</div>\n</div>\n\n<div class=\"card\">\n  <h2 style=\"margin:0 0 8px\">Files Affected</h2>\n  <table>\n    <thead><tr><th>File</th><th>Status</th><th style=\"text-align:right\">Changes</th></tr></thead>\n    <tbody>${rows || '<tr><td colspan=3>No files</td></tr>'}</tbody>\n  </table>\n</div>\n\n<div class=\"card\">\n  <h2 style=\"margin:0 0 8px\">Choose Next Action</h2>\n  <div class=\"row\">\n    <form method=\"post\" action=\"/webhook/github-assistant\">${hidden}\n      <input type=\"hidden\" name=\"action\" value=\"draft_issue\">\n      <input type=\"hidden\" name=\"confirm_artifact\" value=\"true\">\n      <button class=\"btn\" type=\"submit\">Draft Issue</button>\n    </form>\n    <form method=\"post\" action=\"/webhook/github-assistant\">${hidden}\n      <input type=\"hidden\" name=\"action\" value=\"draft_pr\">\n      <input type=\"hidden\" name=\"confirm_artifact\" value=\"true\">\n      <button class=\"btn\" type=\"submit\">Draft PR</button>\n    </form>\n    <form method=\"post\" action=\"/webhook/github-assistant\">${hidden}\n      <input type=\"hidden\" name=\"action\" value=\"no_action\">\n      <button class=\"btn secondary\" type=\"submit\">No Action</button>\n    </form>\n  </div>\n  <p style=\"margin-top:10px;color:#6b7280\">Publishing still requires a separate approval run with a GitHub token.</p>\n</div>\n</body></html>`;\n\nreturn [{ json: { ...j, ui_html: html } }];\n"
+      }
+    },
+    {
+      "id": "node-respond-ui",
+      "name": "Respond UI",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        2540,
+        120
+      ],
+      "parameters": {
+        "respondWith": "text",
+        "responseBody": "={{ $json.ui_html }}",
+        "options": {
+          "responseCode": 200
+        }
+      }
+    },
+    {
+      "id": "node-ui-inject",
+      "name": "UI Inject Params",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        430,
+        120
+      ],
+      "parameters": {
+        "jsCode": "const base = $input.first().json;\nconst q = ($node['UI Webhook'] && $node['UI Webhook'].json && $node['UI Webhook'].json.query) ? $node['UI Webhook'].json.query : {};\n\n// Keep UI Request Builder as the canonical defaults. Allow optional overrides via query.\nconst merged = {\n  ...base,\n  ui: true,\n  repo_owner: q.repo_owner || q.owner || base.repo_owner,\n  repo_name: q.repo_name || q.repo || base.repo_name,\n};\n\nif (q.pr_number) merged.pr_number = Number(q.pr_number);\nif (q.commit || q.commit_sha) merged.commit = q.commit || q.commit_sha;\nif (q.base || q.from) merged.base = q.base || q.from;\nif (q.head || q.to || q.branch || q.ref) merged.head = q.head || q.to || q.branch || q.ref;\n\nreturn [{ json: merged }];\n"
+      }
+    }
+  ],
+  "connections": {
+    "When clicking Execute workflow": {
+      "main": [
+        [
+          {
+            "node": "Manual Request Defaults",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Manual Request Defaults": {
+      "main": [
+        [
+          {
+            "node": "Prepare GitHub Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Prepare GitHub Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare GitHub Request": {
+      "main": [
+        [
+          {
+            "node": "Verifier Assistant",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Verifier Assistant": {
+      "main": [
+        [
+          {
+            "node": "Analyzer Assistant",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Analyzer Assistant": {
+      "main": [
+        [
+          {
+            "node": "Reviewer Assistant",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Reviewer Assistant": {
+      "main": [
+        [
+          {
+            "node": "Artifact Decision Assistant",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Artifact Decision Assistant": {
+      "main": [
+        [
+          {
+            "node": "Route Artifact Type",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Route Artifact Type": {
+      "main": [
+        [
+          {
+            "node": "Issue Drafter Assistant",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "PR Drafter Assistant",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Build Draft Response",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "PR Drafter Assistant",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Issue Drafter Assistant",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "PR Drafter Assistant",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Issue Drafter Assistant": {
+      "main": [
+        [
+          {
+            "node": "Editor Assistant",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "PR Drafter Assistant": {
+      "main": [
+        [
+          {
+            "node": "Editor Assistant",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Editor Assistant": {
+      "main": [
+        [
+          {
+            "node": "Build Draft Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Draft Response": {
+      "main": [
+        [
+          {
+            "node": "UI Mode?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Should Publish?": {
+      "main": [
+        [
+          {
+            "node": "Publish to GitHub",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Publish to GitHub": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "UI Webhook": {
+      "main": [
+        [
+          {
+            "node": "UI Request Builder",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "UI Request Builder": {
+      "main": [
+        [
+          {
+            "node": "UI Inject Params",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "UI Mode?": {
+      "main": [
+        [
+          {
+            "node": "Render Decision UI",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Should Publish?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Render Decision UI": {
+      "main": [
+        [
+          {
+            "node": "Respond UI",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "UI Inject Params": {
+      "main": [
+        [
+          {
+            "node": "Prepare GitHub Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "id": "github-multi-agent-assistant",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "local"
+  }
+}
