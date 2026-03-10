@@ -1,0 +1,103 @@
+{% extends "base.html" %}
+{% block title %}Review Changes — GitHub Review Agent{% endblock %}
+{% block content %}
+<div class="page">
+  <div class="card">
+    <div class="card-header">
+      <h1>Review Changes</h1>
+      <p>Analyze repository changes with AI — identify issues, assess risk, and decide next steps.</p>
+    </div>
+    <div class="card-body">
+      <form action="{{ url_for('review') }}" method="post" id="review-form">
+
+        <div class="form-group">
+          <label for="repo">Repository <span class="hint">— local path or GitHub URL</span></label>
+          <input type="text" id="repo" name="repo" value="."
+                 placeholder="./   or   https://github.com/owner/repo">
+          <p class="field-hint">Leave as <code>.</code> if running from inside the repo.</p>
+        </div>
+
+        <hr class="section-divider">
+
+        <div class="form-group">
+          <div class="section-label">Compare Mode</div>
+          <div class="toggle-group" style="max-width:320px;margin-bottom:1rem;">
+            <input type="radio" name="compare_mode" id="mode-branch" value="branch" checked>
+            <label for="mode-branch">Branch</label>
+            <input type="radio" name="compare_mode" id="mode-commits" value="commits">
+            <label for="mode-commits">Commits</label>
+          </div>
+
+          <!-- Branch mode -->
+          <div id="branch-panel">
+            <label for="base_branch">Base Branch <span class="hint">— current branch is compared against this</span></label>
+            <input type="text" id="base_branch" name="base_branch" class="mono" placeholder="main">
+            <p class="field-hint">Leave blank to use the repo's default branch.</p>
+          </div>
+
+          <!-- Commits mode -->
+          <div id="commits-panel" style="display:none;">
+            <div class="input-row">
+              <div>
+                <label for="from_commit">From Commit</label>
+                <input type="text" id="from_commit" name="from_commit" class="mono"
+                       placeholder="abc123">
+              </div>
+              <div>
+                <label for="to_commit">To Commit <span class="hint">— optional</span></label>
+                <input type="text" id="to_commit" name="to_commit" class="mono"
+                       placeholder="def456">
+              </div>
+            </div>
+            <p class="field-hint">
+              One hash → compares that commit to its parent.
+              Two hashes → reviews the range between them.
+            </p>
+          </div>
+        </div>
+
+        <hr class="section-divider">
+
+        <div class="form-group">
+          <label for="token">GitHub Token <span class="hint">— optional, needed to create issues or PRs later</span></label>
+          <input type="password" id="token" name="token" placeholder="ghp_...">
+        </div>
+        <!-- Model override is always skipped; no option shown. -->
+        <button type="submit" class="btn btn-primary btn-full btn-lg" id="submit-btn">
+          <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
+          </svg>
+          Run Review
+        </button>
+      </form>
+    </div>
+  </div>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+var modeRadios = document.querySelectorAll('[name="compare_mode"]');
+var branchPanel = document.getElementById('branch-panel');
+var commitsPanel = document.getElementById('commits-panel');
+
+function updateMode() {
+  var mode = document.querySelector('[name="compare_mode"]:checked').value;
+  branchPanel.style.display = mode === 'branch' ? '' : 'none';
+  commitsPanel.style.display = mode === 'commits' ? '' : 'none';
+}
+
+modeRadios.forEach(function(r) { r.addEventListener('change', updateMode); });
+
+// Progress indicator
+document.getElementById('review-form').addEventListener('submit', function() {
+  var btn = document.getElementById('submit-btn');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Analyzing…';
+  var progress = document.createElement('div');
+  progress.className = 'alert alert-info mt-3';
+  progress.innerHTML = '<b>Review in progress…</b> This may take a few seconds for large diffs.';
+  btn.parentNode.appendChild(progress);
+});
+</script>
+{% endblock %}
+
