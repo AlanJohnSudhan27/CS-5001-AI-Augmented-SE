@@ -1,0 +1,814 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>GitHub Repository Agent</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            surface: { 1: '#0d1117', 2: '#161b22', 3: '#21262d', 4: '#30363d' },
+            accent: { DEFAULT: '#58a6ff', muted: '#388bfd33' },
+            success: { DEFAULT: '#3fb950', muted: '#23863533' },
+            danger: { DEFAULT: '#f85149', muted: '#f8514933' },
+            warning: { DEFAULT: '#d29922', muted: '#d2992233' },
+          },
+          fontFamily: { sans: ['"Inter"', 'system-ui', 'sans-serif'] },
+        }
+      }
+    }
+  </script>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <style>
+    [x-cloak] { display: none !important; }
+    pre { white-space: pre-wrap; word-wrap: break-word; }
+    .tab-enter { animation: fadeIn .2s ease-out; }
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
+    @keyframes pulse-ring { 0% { box-shadow: 0 0 0 0 rgba(88,166,255,.5); } 70% { box-shadow: 0 0 0 8px rgba(88,166,255,0); } 100% { box-shadow: 0 0 0 0 rgba(88,166,255,0); } }
+    .step-active { animation: pulse-ring 1.5s infinite; }
+    ::-webkit-scrollbar { width: 8px; } ::-webkit-scrollbar-track { background: #161b22; } ::-webkit-scrollbar-thumb { background: #30363d; border-radius: 4px; }
+  </style>
+</head>
+
+<body class="bg-surface-1 text-gray-200 min-h-screen font-sans" x-data="app()" x-cloak>
+
+  <!-- HEADER -->
+  <header class="bg-surface-2 border-b border-surface-4 sticky top-0 z-30">
+    <div class="max-w-6xl mx-auto flex items-center justify-between px-6 py-3">
+      <div class="flex items-center gap-3">
+        <div class="w-8 h-8 rounded-lg bg-accent/20 flex items-center justify-center">
+          <svg class="w-5 h-5 text-accent" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M12 2C6.477 2 2 6.484 2 12.017c0 4.425 2.865 8.18 6.839 9.504.5.092.682-.217.682-.483 0-.237-.008-.868-.013-1.703-2.782.605-3.369-1.343-3.369-1.343-.454-1.158-1.11-1.466-1.11-1.466-.908-.62.069-.608.069-.608 1.003.07 1.531 1.032 1.531 1.032.892 1.53 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.113-4.555-4.951 0-1.093.39-1.988 1.029-2.688-.103-.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 1.026A9.564 9.564 0 0 1 12 6.844a9.59 9.59 0 0 1 2.504.337c1.909-1.296 2.747-1.027 2.747-1.027.546 1.379.202 2.398.1 2.651.64.7 1.028 1.595 1.028 2.688 0 3.848-2.339 4.695-4.566 4.943.359.309.678.92.678 1.855 0 1.338-.012 2.419-.012 2.747 0 .268.18.58.688.482A10.02 10.02 0 0 0 22 12.017C22 6.484 17.522 2 12 2z"/>
+          </svg>
+        </div>
+        <div>
+          <h1 class="text-lg font-semibold text-white leading-tight">GitHub Repository Agent</h1>
+          <p class="text-xs text-gray-500">MCP + A2A Multi-Agent System</p>
+        </div>
+      </div>
+      <div class="flex items-center gap-2 text-xs text-gray-500">
+        <span class="relative flex h-2 w-2">
+          <span class="absolute inline-flex h-full w-full rounded-full opacity-75"
+                :class="wsConnected ? 'bg-success animate-ping' : 'bg-danger'"></span>
+          <span class="relative inline-flex h-2 w-2 rounded-full"
+                :class="wsConnected ? 'bg-success' : 'bg-danger'"></span>
+        </span>
+        <span x-text="wsConnected ? 'Connected' : 'Disconnected'"></span>
+      </div>
+    </div>
+  </header>
+
+  <!-- TAB BAR -->
+  <nav class="bg-surface-2 border-b border-surface-4">
+    <div class="max-w-6xl mx-auto px-6 flex gap-1">
+      <template x-for="(tab, i) in tabs" :key="i">
+        <button @click="activeTab = i"
+          :class="activeTab === i
+            ? 'text-white border-b-2 border-accent bg-surface-3/50'
+            : 'text-gray-400 hover:text-gray-200 hover:bg-surface-3/30 border-b-2 border-transparent'"
+          class="px-5 py-3 text-sm font-medium transition-all duration-150"
+          x-text="tab.label">
+        </button>
+      </template>
+    </div>
+  </nav>
+
+  <!-- MAIN CONTENT -->
+  <main class="max-w-6xl mx-auto px-6 py-8">
+
+    <!-- ============================================================== -->
+    <!-- TAB 1: Review Changes                                          -->
+    <!-- ============================================================== -->
+    <section x-show="activeTab === 0" x-transition:enter="tab-enter" class="space-y-6">
+      <div class="bg-surface-2 rounded-xl border border-surface-4 overflow-hidden">
+        <div class="px-6 py-4 border-b border-surface-4">
+          <h2 class="text-base font-semibold text-white">Review Changes</h2>
+          <p class="text-xs text-gray-500 mt-0.5">Analyze git diffs, categorize changes, and assess risk</p>
+        </div>
+
+        <div class="p-6 space-y-5">
+          <div>
+            <label class="block text-sm font-medium text-gray-300 mb-1.5">Repository</label>
+            <div class="relative">
+              <input type="text" x-model="review.repo_source"
+                @input="onRepoSourceChange($event.target.value, 'review')"
+                class="w-full bg-surface-3 border border-surface-4 rounded-lg px-4 py-2.5 text-sm text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-accent/50 focus:border-accent transition"
+                placeholder="https://github.com/owner/repo  or  /local/path/to/repo" />
+              <span x-show="review._isUrl" class="absolute right-3 top-1/2 -translate-y-1/2 text-xs bg-accent/20 text-accent px-2 py-0.5 rounded-full">URL</span>
+              <span x-show="!review._isUrl && review.repo_source.length > 0" class="absolute right-3 top-1/2 -translate-y-1/2 text-xs bg-surface-4 text-gray-400 px-2 py-0.5 rounded-full">Local</span>
+            </div>
+            <p class="text-xs text-gray-600 mt-1">Paste a GitHub URL to auto-clone, or enter a local path</p>
+          </div>
+
+          <div>
+            <label class="block text-sm font-medium text-gray-300 mb-1.5">Commit Range <span class="text-gray-600 font-normal">(optional)</span></label>
+            <input type="text" x-model="review.commit_range"
+              class="w-full bg-surface-3 border border-surface-4 rounded-lg px-4 py-2.5 text-sm text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-accent/50 focus:border-accent transition"
+              placeholder="HEAD~3..HEAD  (leave empty for working tree diff)" />
+          </div>
+
+          <button @click="runReview()" :disabled="loading || !review.repo_source.trim()"
+            class="inline-flex items-center gap-2 bg-accent hover:bg-blue-500 disabled:opacity-40 disabled:cursor-not-allowed px-5 py-2.5 rounded-lg text-sm font-medium text-white transition-all">
+            <template x-if="!loading || activeTab !== 0">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
+            </template>
+            <template x-if="loading && activeTab === 0">
+              <svg class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
+            </template>
+            <span x-text="loading && activeTab === 0 ? 'Analyzing...' : 'Review Changes'"></span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Review result card -->
+      <template x-if="reviewResult">
+        <div class="space-y-4 tab-enter">
+          <div class="bg-surface-2 rounded-xl border border-surface-4 overflow-hidden">
+            <div class="px-6 py-4 border-b border-surface-4 flex items-center justify-between">
+              <h3 class="text-base font-semibold text-white">Review Result</h3>
+              <button @click="draftFromReview()"
+                class="inline-flex items-center gap-1.5 bg-success/10 hover:bg-success/20 text-success px-3 py-1.5 rounded-lg text-xs font-medium transition">
+                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4"/></svg>
+                Draft Issue/PR from this
+              </button>
+            </div>
+            <div class="p-6" x-html="formatReviewResult(reviewResult)"></div>
+          </div>
+        </div>
+      </template>
+    </section>
+
+    <!-- ============================================================== -->
+    <!-- TAB 2: Draft Issue/PR                                          -->
+    <!-- ============================================================== -->
+    <section x-show="activeTab === 1" x-transition:enter="tab-enter" class="space-y-6">
+      <div class="bg-surface-2 rounded-xl border border-surface-4 overflow-hidden">
+        <div class="px-6 py-4 border-b border-surface-4">
+          <h2 class="text-base font-semibold text-white">Draft Issue or Pull Request</h2>
+          <p class="text-xs text-gray-500 mt-0.5">Generate structured GitHub content from instructions</p>
+        </div>
+
+        <div class="p-6 space-y-5">
+          <!-- Type toggle -->
+          <fieldset>
+            <legend class="text-xs font-medium text-gray-500 uppercase tracking-wider mb-2">Type</legend>
+            <div class="flex rounded-lg overflow-hidden border border-surface-4">
+              <button @click="draft.action_type = 'issue'"
+                :class="draft.action_type === 'issue' ? 'bg-success text-white' : 'bg-surface-3 text-gray-400 hover:text-white'"
+                class="px-4 py-2 text-sm font-medium transition-all">Issue</button>
+              <button @click="draft.action_type = 'pr'"
+                :class="draft.action_type === 'pr' ? 'bg-purple-500 text-white' : 'bg-surface-3 text-gray-400 hover:text-white'"
+                class="px-4 py-2 text-sm font-medium transition-all">Pull Request</button>
+            </div>
+          </fieldset>
+
+          <!-- Instruction textarea (always visible) -->
+          <div>
+            <label class="block text-sm font-medium text-gray-300 mb-1.5">Instruction</label>
+            <textarea x-model="draft.instruction" rows="4"
+              class="w-full bg-surface-3 border border-surface-4 rounded-lg px-4 py-2.5 text-sm text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-accent/50 focus:border-accent transition resize-y"
+              placeholder='e.g. "Create an issue for missing input validation in login API"'></textarea>
+            <p x-show="draft._fromReview" class="text-xs text-accent mt-1">Auto-populated from review results. You can edit before generating.</p>
+          </div>
+
+          <!-- Repository + Commit Range -->
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label class="block text-sm font-medium text-gray-300 mb-1.5">Repository</label>
+              <div class="relative">
+                <input type="text" x-model="draft.repo_source"
+                  @input="onRepoSourceChange($event.target.value, 'draft')"
+                  class="w-full bg-surface-3 border border-surface-4 rounded-lg px-4 py-2.5 text-sm text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-accent/50 focus:border-accent transition"
+                  placeholder="URL or local path" />
+                <span x-show="draft._isUrl" class="absolute right-3 top-1/2 -translate-y-1/2 text-xs bg-accent/20 text-accent px-2 py-0.5 rounded-full">URL</span>
+              </div>
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-300 mb-1.5">Commit Range <span class="text-gray-600 font-normal">(optional)</span></label>
+              <input type="text" x-model="draft.commit_range"
+                class="w-full bg-surface-3 border border-surface-4 rounded-lg px-4 py-2.5 text-sm text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-accent/50 focus:border-accent transition" />
+            </div>
+          </div>
+
+          <!-- GitHub target (auto-filled from URL) -->
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label class="block text-sm font-medium text-gray-300 mb-1.5">GitHub Owner</label>
+              <input type="text" x-model="draft.owner"
+                class="w-full bg-surface-3 border border-surface-4 rounded-lg px-4 py-2.5 text-sm text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-accent/50 focus:border-accent transition"
+                placeholder="Auto-filled from URL or enter manually" />
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-300 mb-1.5">GitHub Repo</label>
+              <input type="text" x-model="draft.repo"
+                class="w-full bg-surface-3 border border-surface-4 rounded-lg px-4 py-2.5 text-sm text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-accent/50 focus:border-accent transition"
+                placeholder="Auto-filled from URL or enter manually" />
+            </div>
+          </div>
+
+          <!-- PR-specific: branches -->
+          <div x-show="draft.action_type === 'pr'" x-transition class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label class="block text-sm font-medium text-gray-300 mb-1.5">Head Branch</label>
+              <input type="text" x-model="draft.head"
+                class="w-full bg-surface-3 border border-surface-4 rounded-lg px-4 py-2.5 text-sm text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-accent/50 focus:border-accent transition"
+                placeholder="feature-branch" />
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-300 mb-1.5">Base Branch</label>
+              <input type="text" x-model="draft.base"
+                class="w-full bg-surface-3 border border-surface-4 rounded-lg px-4 py-2.5 text-sm text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-accent/50 focus:border-accent transition"
+                placeholder="main" />
+            </div>
+          </div>
+
+          <button @click="runDraft()" :disabled="loading"
+            class="inline-flex items-center gap-2 bg-accent hover:bg-blue-500 disabled:opacity-40 disabled:cursor-not-allowed px-5 py-2.5 rounded-lg text-sm font-medium text-white transition-all">
+            <template x-if="loading && activeTab === 1">
+              <svg class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
+            </template>
+            <span x-text="loading && activeTab === 1 ? 'Running Pipeline...' : 'Generate Draft'"></span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Pipeline progress -->
+      <div x-show="loading && activeTab === 1" x-transition class="bg-surface-2 rounded-xl border border-surface-4 p-6">
+        <h3 class="text-sm font-semibold text-white mb-4">Agent Pipeline</h3>
+        <div class="flex items-center justify-between">
+          <template x-for="(stage, idx) in pipelineStages" :key="stage.name">
+            <div class="flex items-center flex-1">
+              <div class="flex flex-col items-center gap-1.5">
+                <div class="w-10 h-10 rounded-full flex items-center justify-center text-xs font-bold transition-all"
+                  :class="stage.active ? 'bg-accent text-white step-active' : stage.done ? 'bg-success/20 text-success' : 'bg-surface-4 text-gray-500'">
+                  <template x-if="stage.done"><svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg></template>
+                  <template x-if="!stage.done"><span x-text="idx + 1"></span></template>
+                </div>
+                <span class="text-[11px] font-medium" :class="stage.active ? 'text-accent' : stage.done ? 'text-success' : 'text-gray-500'" x-text="stage.label"></span>
+              </div>
+              <div x-show="idx < pipelineStages.length - 1"
+                class="flex-1 h-0.5 mx-3 mt-[-18px]"
+                :class="stage.done ? 'bg-success/40' : 'bg-surface-4'"></div>
+            </div>
+          </template>
+        </div>
+      </div>
+
+      <!-- Draft result -->
+      <template x-if="draftResult">
+        <div class="space-y-4 tab-enter">
+          <div class="bg-surface-2 rounded-xl border border-surface-4 overflow-hidden">
+            <div class="px-6 py-4 border-b border-surface-4">
+              <h3 class="text-base font-semibold text-white">Generated Draft</h3>
+            </div>
+            <div class="p-6" x-html="formatDraftResult(draftResult)"></div>
+          </div>
+
+          <div class="bg-surface-2 rounded-xl border border-warning/40 overflow-hidden">
+            <div class="px-6 py-4 border-b border-warning/20 bg-warning/5">
+              <h3 class="text-base font-semibold text-warning flex items-center gap-2">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/></svg>
+                Gatekeeper Reflection
+              </h3>
+            </div>
+            <div class="p-6" x-html="formatGatekeeperResult(draftResult)"></div>
+          </div>
+
+          <div class="flex items-center gap-3 pt-2" x-show="draftTaskId">
+            <button @click="approveTask(draftTaskId)"
+              class="inline-flex items-center gap-2 bg-success hover:bg-green-400 px-6 py-2.5 rounded-lg text-sm font-semibold text-white transition-all shadow-lg shadow-success/20">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>
+              Approve &amp; Create on GitHub
+            </button>
+            <button @click="rejectTask(draftTaskId)"
+              class="inline-flex items-center gap-2 bg-surface-3 hover:bg-danger/20 text-gray-300 hover:text-danger px-6 py-2.5 rounded-lg text-sm font-medium transition-all border border-surface-4 hover:border-danger/40">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
+              Reject
+            </button>
+          </div>
+        </div>
+      </template>
+    </section>
+
+    <!-- ============================================================== -->
+    <!-- TAB 3: Improve Issue/PR                                        -->
+    <!-- ============================================================== -->
+    <section x-show="activeTab === 2" x-transition:enter="tab-enter" class="space-y-6">
+      <div class="bg-surface-2 rounded-xl border border-surface-4 overflow-hidden">
+        <div class="px-6 py-4 border-b border-surface-4">
+          <h2 class="text-base font-semibold text-white">Improve Existing Issue or PR</h2>
+          <p class="text-xs text-gray-500 mt-0.5">Critique and enhance an existing GitHub issue or pull request</p>
+        </div>
+
+        <div class="p-6 space-y-5">
+          <fieldset>
+            <legend class="text-xs font-medium text-gray-500 uppercase tracking-wider mb-2">Type</legend>
+            <div class="flex rounded-lg overflow-hidden border border-surface-4">
+              <button @click="improve.item_type = 'issue'"
+                :class="improve.item_type === 'issue' ? 'bg-success text-white' : 'bg-surface-3 text-gray-400 hover:text-white'"
+                class="px-4 py-2 text-sm font-medium transition-all">Issue</button>
+              <button @click="improve.item_type = 'pr'"
+                :class="improve.item_type === 'pr' ? 'bg-purple-500 text-white' : 'bg-surface-3 text-gray-400 hover:text-white'"
+                class="px-4 py-2 text-sm font-medium transition-all">Pull Request</button>
+            </div>
+          </fieldset>
+
+          <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div class="md:col-span-2">
+              <label class="block text-sm font-medium text-gray-300 mb-1.5">Repository</label>
+              <div class="relative">
+                <input type="text" x-model="improve.repo_source"
+                  @input="onRepoSourceChange($event.target.value, 'improve')"
+                  class="w-full bg-surface-3 border border-surface-4 rounded-lg px-4 py-2.5 text-sm text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-accent/50 focus:border-accent transition"
+                  placeholder="https://github.com/owner/repo  or  owner/repo" />
+                <span x-show="improve._isUrl" class="absolute right-3 top-1/2 -translate-y-1/2 text-xs bg-accent/20 text-accent px-2 py-0.5 rounded-full">URL</span>
+              </div>
+              <p class="text-xs text-gray-600 mt-1">Paste a GitHub URL or enter as owner/repo</p>
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-300 mb-1.5"
+                x-text="improve.item_type === 'pr' ? 'PR Number' : 'Issue Number'"></label>
+              <input type="number" x-model.number="improve.number" min="1"
+                class="w-full bg-surface-3 border border-surface-4 rounded-lg px-4 py-2.5 text-sm text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-accent/50 focus:border-accent transition"
+                placeholder="42" />
+            </div>
+          </div>
+
+          <button @click="runImprove()" :disabled="loading || !improve.repo_source.trim()"
+            class="inline-flex items-center gap-2 bg-accent hover:bg-blue-500 disabled:opacity-40 disabled:cursor-not-allowed px-5 py-2.5 rounded-lg text-sm font-medium text-white transition-all">
+            <template x-if="loading && activeTab === 2">
+              <svg class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
+            </template>
+            <span x-text="loading && activeTab === 2 ? 'Running Pipeline...' : 'Analyze & Improve'"></span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Improve results -->
+      <template x-if="improveResult">
+        <div class="space-y-4 tab-enter">
+          <div class="bg-surface-2 rounded-xl border border-surface-4 overflow-hidden">
+            <div class="px-6 py-4 border-b border-surface-4">
+              <h3 class="text-base font-semibold text-white flex items-center gap-2">
+                <svg class="w-4 h-4 text-danger" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path stroke-linecap="round" stroke-linejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg>
+                Critique (Reviewer)
+              </h3>
+            </div>
+            <div class="p-6">
+              <pre class="text-sm text-gray-300 bg-surface-1 p-4 rounded-lg leading-relaxed" x-text="getStage(improveResult, 'reviewer')"></pre>
+            </div>
+          </div>
+
+          <div class="bg-surface-2 rounded-xl border border-success/40 overflow-hidden">
+            <div class="px-6 py-4 border-b border-success/20 bg-success/5">
+              <h3 class="text-base font-semibold text-success flex items-center gap-2">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                Improved Version (Writer)
+              </h3>
+            </div>
+            <div class="p-6">
+              <pre class="text-sm text-gray-300 bg-surface-1 p-4 rounded-lg leading-relaxed" x-text="getStage(improveResult, 'writer')"></pre>
+            </div>
+          </div>
+
+          <div class="bg-surface-2 rounded-xl border border-warning/40 overflow-hidden">
+            <div class="px-6 py-4 border-b border-warning/20 bg-warning/5">
+              <h3 class="text-base font-semibold text-warning flex items-center gap-2">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/></svg>
+                Gatekeeper Reflection
+              </h3>
+            </div>
+            <div class="p-6">
+              <pre class="text-sm text-gray-300 bg-surface-1 p-4 rounded-lg leading-relaxed" x-text="getStage(improveResult, 'gatekeeper')"></pre>
+            </div>
+          </div>
+
+          <div class="flex items-center gap-3 pt-2" x-show="improveTaskId">
+            <button @click="approveTask(improveTaskId)"
+              class="inline-flex items-center gap-2 bg-success hover:bg-green-400 px-6 py-2.5 rounded-lg text-sm font-semibold text-white transition-all shadow-lg shadow-success/20">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>
+              Approve Improvement
+            </button>
+            <button @click="rejectTask(improveTaskId)"
+              class="inline-flex items-center gap-2 bg-surface-3 hover:bg-danger/20 text-gray-300 hover:text-danger px-6 py-2.5 rounded-lg text-sm font-medium transition-all border border-surface-4 hover:border-danger/40">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
+              Reject
+            </button>
+          </div>
+        </div>
+      </template>
+    </section>
+
+    <!-- Toast -->
+    <div x-show="statusMessage" x-transition:enter="transition ease-out duration-200"
+      x-transition:enter-start="opacity-0 translate-y-2" x-transition:enter-end="opacity-100 translate-y-0"
+      class="fixed bottom-6 right-6 max-w-md z-50 rounded-xl p-4 border shadow-2xl backdrop-blur"
+      :class="statusType === 'error' ? 'bg-danger/10 border-danger/40 text-danger' : 'bg-success/10 border-success/40 text-success'">
+      <div class="flex items-start gap-3">
+        <template x-if="statusType === 'error'">
+          <svg class="w-5 h-5 shrink-0 mt-0.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>
+        </template>
+        <template x-if="statusType !== 'error'">
+          <svg class="w-5 h-5 shrink-0 mt-0.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+        </template>
+        <div class="flex-1">
+          <p class="text-sm font-medium" x-text="statusMessage"></p>
+        </div>
+        <button @click="statusMessage = ''" class="text-current opacity-60 hover:opacity-100">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
+        </button>
+      </div>
+    </div>
+
+  </main>
+
+  <!-- FOOTER -->
+  <footer class="border-t border-surface-4 mt-12 py-6">
+    <div class="max-w-6xl mx-auto px-6 flex items-center justify-between text-xs text-gray-600">
+      <span>CS-5001 AI-Augmented SE &mdash; Week 7: Agentic Protocols</span>
+      <span>MCP + A2A Architecture</span>
+    </div>
+  </footer>
+
+  <!-- APP LOGIC -->
+  <script>
+    function app() {
+      return {
+        activeTab: 0,
+        tabs: [
+          { label: 'Review Changes' },
+          { label: 'Draft Issue/PR' },
+          { label: 'Improve Issue/PR' },
+        ],
+        loading: false,
+        statusMessage: '',
+        statusType: 'info',
+        wsConnected: false,
+
+        pipelineStages: [
+          { name: 'reviewer', label: 'Reviewer', active: false, done: false },
+          { name: 'planner',  label: 'Planner',  active: false, done: false },
+          { name: 'writer',   label: 'Writer',   active: false, done: false },
+          { name: 'gatekeeper', label: 'Gatekeeper', active: false, done: false },
+        ],
+
+        // Tab 1
+        review: { repo_source: '', commit_range: '', _isUrl: false },
+        reviewResult: null,
+
+        // Tab 2
+        draft: {
+          action_type: 'issue',
+          repo_source: '',
+          commit_range: '',
+          instruction: '',
+          review_context: '',
+          owner: '',
+          repo: '',
+          head: '',
+          base: 'main',
+          _isUrl: false,
+          _fromReview: false,
+        },
+        draftResult: null,
+        draftTaskId: null,
+
+        // Tab 3
+        improve: { repo_source: '', number: 1, item_type: 'issue', _isUrl: false },
+        improveResult: null,
+        improveTaskId: null,
+
+        ws: null,
+
+        init() { this.connectWS(); },
+
+        connectWS() {
+          const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
+          this.ws = new WebSocket(`${proto}//${location.host}/ws`);
+          this.ws.onopen = () => { this.wsConnected = true; };
+          this.ws.onmessage = (e) => {
+            const data = JSON.parse(e.data);
+            console.log('WS:', data);
+            if (data.event === 'stage_start') this._markStage(data.stage, true, false);
+            if (data.event === 'stage_complete') this._markStage(data.stage, false, true);
+          };
+          this.ws.onclose = () => {
+            this.wsConnected = false;
+            setTimeout(() => this.connectWS(), 3000);
+          };
+        },
+
+        _markStage(name, active, done) {
+          const s = this.pipelineStages.find(s => s.name === name);
+          if (s) { s.active = active; s.done = done; }
+        },
+
+        _resetPipeline() {
+          this.pipelineStages.forEach(s => { s.active = false; s.done = false; });
+        },
+
+        // URL detection & owner/repo extraction
+        onRepoSourceChange(value, target) {
+          const isUrl = /github\.com\//.test(value);
+          if (target === 'review') {
+            this.review._isUrl = isUrl;
+          } else if (target === 'draft') {
+            this.draft._isUrl = isUrl;
+            if (isUrl) {
+              const m = value.match(/github\.com\/([^/]+)\/([^/.\s]+)/);
+              if (m) { this.draft.owner = m[1]; this.draft.repo = m[2]; }
+            }
+          } else if (target === 'improve') {
+            this.improve._isUrl = isUrl;
+          }
+        },
+
+        // ---------------------------------------------------------------
+        // Task 1: Review
+        // ---------------------------------------------------------------
+
+        async runReview() {
+          this.loading = true;
+          this.reviewResult = null;
+          this.statusMessage = '';
+          this._resetPipeline();
+          try {
+            const resp = await fetch('/api/review', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                repo_source: this.review.repo_source.trim(),
+                commit_range: this.review.commit_range,
+              }),
+            });
+            if (!resp.ok) {
+              const errBody = await resp.text();
+              throw new Error(`Server returned ${resp.status}: ${errBody}`);
+            }
+            const data = await resp.json();
+            this.reviewResult = data;
+            // Auto-fill draft fields from resolved info
+            if (data._resolved) {
+              this.draft.repo_source = this.review.repo_source;
+              if (data._resolved.owner) this.draft.owner = data._resolved.owner;
+              if (data._resolved.repo) this.draft.repo = data._resolved.repo;
+            }
+          } catch (err) {
+            this.statusMessage = `Error: ${err.message}`;
+            this.statusType = 'error';
+          }
+          this.loading = false;
+        },
+
+        draftFromReview() {
+          const reviewText = this.getStage(this.reviewResult, 'reviewer');
+          this.draft.instruction = `Based on the following code review, draft the appropriate content:\n\n${reviewText}`;
+          this.draft.review_context = reviewText;
+          this.draft._fromReview = true;
+          if (!this.draft.repo_source) {
+            this.draft.repo_source = this.review.repo_source;
+          }
+          this.draft.commit_range = this.review.commit_range;
+          this.activeTab = 1;
+        },
+
+        // ---------------------------------------------------------------
+        // Task 2: Draft
+        // ---------------------------------------------------------------
+
+        async runDraft() {
+          this.loading = true;
+          this.draftResult = null;
+          this.draftTaskId = null;
+          this.statusMessage = '';
+          this._resetPipeline();
+
+          // Determine mode: if we have review_context, use from_review to skip re-running reviewer
+          const mode = this.draft.review_context ? 'from_review' : 'from_instruction';
+
+          try {
+            const resp = await fetch('/api/draft', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                mode: mode,
+                action_type: this.draft.action_type,
+                repo_source: this.draft.repo_source.trim(),
+                commit_range: this.draft.commit_range,
+                instruction: this.draft.instruction,
+                review_context: this.draft.review_context,
+                owner: this.draft.owner,
+                repo: this.draft.repo,
+                head: this.draft.head,
+                base: this.draft.base,
+              }),
+            });
+            if (!resp.ok) {
+              const errBody = await resp.text();
+              throw new Error(`Server returned ${resp.status}: ${errBody}`);
+            }
+            const data = await resp.json();
+            this.draftResult = data;
+            const output = this.parseOutput(data);
+            if (output && output.task_id) {
+              this.draftTaskId = output.task_id;
+            }
+            // Clear review context after use
+            this.draft.review_context = '';
+            this.draft._fromReview = false;
+          } catch (err) {
+            this.statusMessage = `Error: ${err.message}`;
+            this.statusType = 'error';
+          }
+          this.loading = false;
+        },
+
+        // ---------------------------------------------------------------
+        // Task 3: Improve
+        // ---------------------------------------------------------------
+
+        async runImprove() {
+          this.loading = true;
+          this.improveResult = null;
+          this.improveTaskId = null;
+          this.statusMessage = '';
+          this._resetPipeline();
+          try {
+            const resp = await fetch('/api/improve', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                repo_source: this.improve.repo_source.trim(),
+                number: this.improve.number,
+                item_type: this.improve.item_type,
+              }),
+            });
+            if (!resp.ok) {
+              const errBody = await resp.text();
+              throw new Error(`Server returned ${resp.status}: ${errBody}`);
+            }
+            const data = await resp.json();
+            this.improveResult = data;
+            const output = this.parseOutput(data);
+            if (output && output.task_id) {
+              this.improveTaskId = output.task_id;
+            }
+          } catch (err) {
+            this.statusMessage = `Error: ${err.message}`;
+            this.statusType = 'error';
+          }
+          this.loading = false;
+        },
+
+        // ---------------------------------------------------------------
+        // Approval
+        // ---------------------------------------------------------------
+
+        async approveTask(taskId) {
+          this.statusMessage = '';
+          try {
+            const resp = await fetch(`/api/approve/${taskId}`, { method: 'POST' });
+            const data = await resp.json();
+            if (data.status === 'approved') {
+              this.statusMessage = `Approved! ${data.result || data.message || ''}`;
+              this.statusType = 'success';
+            } else {
+              this.statusMessage = `Approval response: ${JSON.stringify(data)}`;
+              this.statusType = 'info';
+            }
+            this.draftTaskId = null;
+            this.improveTaskId = null;
+          } catch (err) {
+            this.statusMessage = `Error: ${err.message}`;
+            this.statusType = 'error';
+          }
+        },
+
+        async rejectTask(taskId) {
+          this.statusMessage = '';
+          try {
+            await fetch(`/api/reject/${taskId}`, { method: 'POST' });
+            this.statusMessage = 'Draft rejected and discarded.';
+            this.statusType = 'info';
+            this.draftTaskId = null;
+            this.improveTaskId = null;
+          } catch (err) {
+            this.statusMessage = `Error: ${err.message}`;
+            this.statusType = 'error';
+          }
+        },
+
+        // ---------------------------------------------------------------
+        // Helpers
+        // ---------------------------------------------------------------
+
+        parseOutput(data) {
+          try {
+            const output = typeof data.output === 'string' ? JSON.parse(data.output) : data.output;
+            return output || data;
+          } catch { return data; }
+        },
+
+        getStage(result, stageName) {
+          if (!result) return '';
+          const output = this.parseOutput(result);
+          if (output.stages && output.stages[stageName]) return output.stages[stageName];
+          return '';
+        },
+
+        formatReviewResult(result) {
+          const reviewer = this.getStage(result, 'reviewer');
+          if (!reviewer) return '<p class="text-gray-500">No review data.</p>';
+          try {
+            const d = JSON.parse(reviewer);
+            const riskColors = { high: 'bg-danger/20 text-danger', medium: 'bg-warning/20 text-warning', low: 'bg-success/20 text-success' };
+            const riskClass = riskColors[d.risk_level] || 'bg-surface-4 text-gray-400';
+            return `
+              <div class="space-y-5">
+                <div class="flex flex-wrap gap-2">
+                  <span class="px-3 py-1 rounded-full text-xs font-semibold bg-accent/20 text-accent">${this.esc(d.category || 'unknown')}</span>
+                  <span class="px-3 py-1 rounded-full text-xs font-semibold ${riskClass}">${this.esc(d.risk_level || '?')} risk</span>
+                  <span class="px-3 py-1 rounded-full text-xs font-semibold bg-purple-500/20 text-purple-300">${this.esc(d.recommended_action || 'unknown')}</span>
+                </div>
+                ${d.summary ? `<div><h4 class="text-sm font-semibold text-gray-300 mb-1">Summary</h4><p class="text-sm text-gray-400 leading-relaxed">${this.esc(d.summary)}</p></div>` : ''}
+                ${(d.issues && d.issues.length) ? `<div><h4 class="text-sm font-semibold text-gray-300 mb-1">Issues Found</h4><ul class="space-y-1">${d.issues.map(i => `<li class="flex items-start gap-2 text-sm text-gray-400"><span class="text-danger mt-0.5">&#9679;</span>${this.esc(i)}</li>`).join('')}</ul></div>` : ''}
+                ${(d.improvements && d.improvements.length) ? `<div><h4 class="text-sm font-semibold text-gray-300 mb-1">Improvements</h4><ul class="space-y-1">${d.improvements.map(i => `<li class="flex items-start gap-2 text-sm text-gray-400"><span class="text-accent mt-0.5">&#9679;</span>${this.esc(i)}</li>`).join('')}</ul></div>` : ''}
+                ${d.justification ? `<div><h4 class="text-sm font-semibold text-gray-300 mb-1">Justification</h4><p class="text-sm text-gray-400 leading-relaxed">${this.esc(d.justification)}</p></div>` : ''}
+              </div>`;
+          } catch {
+            return `<pre class="text-sm text-gray-300 bg-surface-1 p-4 rounded-lg leading-relaxed">${this.esc(reviewer)}</pre>`;
+          }
+        },
+
+        formatDraftResult(result) {
+          const writer = this.getStage(result, 'writer');
+          if (!writer) return '<p class="text-gray-500">No draft data.</p>';
+          try {
+            const d = JSON.parse(writer);
+            return `
+              <div class="space-y-4">
+                <h4 class="text-lg font-semibold text-white">${this.esc(d.title || 'Untitled')}</h4>
+                <div class="bg-surface-1 rounded-lg p-5 border border-surface-4">
+                  <pre class="text-sm text-gray-300 leading-relaxed">${this.esc(d.body || '')}</pre>
+                </div>
+                ${d.labels ? `<div class="flex flex-wrap gap-2">${d.labels.map(l => `<span class="px-2.5 py-1 bg-surface-4 rounded-full text-xs font-medium text-gray-300">${this.esc(l)}</span>`).join('')}</div>` : ''}
+              </div>`;
+          } catch {
+            return `<pre class="text-sm text-gray-300 bg-surface-1 p-4 rounded-lg leading-relaxed">${this.esc(writer)}</pre>`;
+          }
+        },
+
+        formatGatekeeperResult(result) {
+          const gk = this.getStage(result, 'gatekeeper');
+          if (!gk) return '<p class="text-gray-500">No reflection data.</p>';
+          try {
+            const d = JSON.parse(gk);
+            const r = d.reflection || {};
+            const badge = d.approved
+              ? '<span class="inline-flex items-center gap-1.5 px-3 py-1 bg-success/20 rounded-full text-xs font-semibold text-success"><svg class="w-3 h-3" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>APPROVED</span>'
+              : '<span class="inline-flex items-center gap-1.5 px-3 py-1 bg-danger/20 rounded-full text-xs font-semibold text-danger"><svg class="w-3 h-3" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01"/></svg>NEEDS REVISION</span>';
+
+            const sections = [
+              { label: 'Unsupported Claims', items: r.unsupported_claims, color: 'text-danger' },
+              { label: 'Missing Evidence', items: r.missing_evidence, color: 'text-warning' },
+              { label: 'Missing Tests', items: r.missing_tests, color: 'text-warning' },
+              { label: 'Policy Violations', items: r.policy_violations, color: 'text-danger' },
+              { label: 'Vague Language', items: r.vague_language, color: 'text-yellow-400' },
+              { label: 'Completeness Issues', items: r.completeness_issues, color: 'text-warning' },
+            ];
+
+            let html = `<div class="space-y-4">${badge}`;
+            if (d.summary) html += `<p class="text-sm text-gray-400 leading-relaxed">${this.esc(d.summary)}</p>`;
+            for (const s of sections) {
+              if (s.items && s.items.length > 0) {
+                html += `<div><h4 class="text-sm font-semibold text-gray-300 mb-1">${s.label}</h4><ul class="space-y-1">`;
+                html += s.items.map(i => `<li class="flex items-start gap-2 text-sm ${s.color}"><span class="mt-0.5">&#9679;</span><span class="text-gray-400">${this.esc(i)}</span></li>`).join('');
+                html += `</ul></div>`;
+              }
+            }
+            if (d.suggestions) {
+              html += `<div><h4 class="text-sm font-semibold text-gray-300 mb-1">Suggestions</h4><p class="text-sm text-gray-400 leading-relaxed">${this.esc(d.suggestions)}</p></div>`;
+            }
+            html += `</div>`;
+            return html;
+          } catch {
+            return `<pre class="text-sm text-gray-300 bg-surface-1 p-4 rounded-lg leading-relaxed">${this.esc(gk)}</pre>`;
+          }
+        },
+
+        esc(str) {
+          if (str == null) return '';
+          const el = document.createElement('span');
+          el.textContent = String(str);
+          return el.innerHTML;
+        },
+      };
+    }
+  </script>
+</body>
+</html>
