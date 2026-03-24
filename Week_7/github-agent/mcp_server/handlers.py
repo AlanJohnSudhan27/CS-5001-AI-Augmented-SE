@@ -90,6 +90,9 @@ def git_diff(repo_path: str, commit_range: str = "") -> str:
         output = fallback.stdout.strip()
         if not output:
             return "(no changes in working tree or last 5 commits)"
+        # Prepend a note so downstream agents know this is a fallback diff
+        header = f"[NOTE: No uncommitted changes found. Showing diff from the last {depth} commit(s).]\n\n"
+        return header + output[:MAX_FILE_CHARS]
 
     return output[:MAX_FILE_CHARS] if output else "(no changes)"
 

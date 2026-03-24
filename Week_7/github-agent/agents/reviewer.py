@@ -57,6 +57,9 @@ class ReviewerAgent(BaseA2AAgent):
 
         prompt = f"""You are a senior code reviewer. Analyze the following git diff and recent commit log.
 
+The diff may come from uncommitted working tree changes OR from the last 5 commits if no
+uncommitted changes were found. Either way, analyze the actual code changes shown.
+
 ## Git Diff
 ```
 {diff_output}
@@ -83,7 +86,8 @@ Rules:
 - Base your analysis ONLY on the actual diff content shown above
 - Do NOT fabricate or assume any information not present in the diff
 - Justify every finding with specific evidence from the diff
-- If the diff is empty or trivial, recommend "no_action"
+- If the diff contains code changes, you MUST analyze them — even if they come from recent commits rather than uncommitted work
+- Only recommend "no_action" if the diff is literally empty or contains no meaningful code changes
 """
         return await self.llm_call(prompt)
 
