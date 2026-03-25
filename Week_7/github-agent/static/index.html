@@ -93,26 +93,14 @@
 
         <div class="p-6 space-y-5">
           <div>
-            <label class="block text-sm font-medium text-gray-300 mb-1.5">Repository</label>
-            <div class="relative">
-              <input type="text" x-model="review.repo_source"
-                @input="onRepoSourceChange($event.target.value, 'review')"
-                class="w-full bg-surface-3 border border-surface-4 rounded-lg px-4 py-2.5 text-sm text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-accent/50 focus:border-accent transition"
-                placeholder="https://github.com/owner/repo  or  /local/path/to/repo" />
-              <span x-show="review._isUrl" class="absolute right-3 top-1/2 -translate-y-1/2 text-xs bg-accent/20 text-accent px-2 py-0.5 rounded-full">URL</span>
-              <span x-show="!review._isUrl && review.repo_source.length > 0" class="absolute right-3 top-1/2 -translate-y-1/2 text-xs bg-surface-4 text-gray-400 px-2 py-0.5 rounded-full">Local</span>
-            </div>
-            <p class="text-xs text-gray-600 mt-1">Paste a GitHub URL to auto-clone, or enter a local path</p>
-          </div>
-
-          <div>
             <label class="block text-sm font-medium text-gray-300 mb-1.5">Commit Range <span class="text-gray-600 font-normal">(optional)</span></label>
             <input type="text" x-model="review.commit_range"
               class="w-full bg-surface-3 border border-surface-4 rounded-lg px-4 py-2.5 text-sm text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-accent/50 focus:border-accent transition"
-              placeholder="HEAD~3..HEAD  (leave empty for working tree diff)" />
+              placeholder="HEAD~3..HEAD  (leave empty to auto-detect)" />
+            <p class="text-xs text-gray-600 mt-1">Leave empty to check uncommitted changes, or fall back to the last commit</p>
           </div>
 
-          <button @click="runReview()" :disabled="loading || !review.repo_source.trim()"
+          <button @click="runReview()" :disabled="loading"
             class="inline-flex items-center gap-2 bg-accent hover:bg-blue-500 disabled:opacity-40 disabled:cursor-not-allowed px-5 py-2.5 rounded-lg text-sm font-medium text-white transition-all">
             <template x-if="!loading || activeTab !== 0">
               <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
@@ -176,38 +164,27 @@
             <p x-show="draft._fromReview" class="text-xs text-accent mt-1">Auto-populated from review results. You can edit before generating.</p>
           </div>
 
-          <!-- Repository + Commit Range -->
-          <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <label class="block text-sm font-medium text-gray-300 mb-1.5">Repository</label>
-              <div class="relative">
-                <input type="text" x-model="draft.repo_source"
-                  @input="onRepoSourceChange($event.target.value, 'draft')"
-                  class="w-full bg-surface-3 border border-surface-4 rounded-lg px-4 py-2.5 text-sm text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-accent/50 focus:border-accent transition"
-                  placeholder="URL or local path" />
-                <span x-show="draft._isUrl" class="absolute right-3 top-1/2 -translate-y-1/2 text-xs bg-accent/20 text-accent px-2 py-0.5 rounded-full">URL</span>
-              </div>
-            </div>
-            <div>
-              <label class="block text-sm font-medium text-gray-300 mb-1.5">Commit Range <span class="text-gray-600 font-normal">(optional)</span></label>
-              <input type="text" x-model="draft.commit_range"
-                class="w-full bg-surface-3 border border-surface-4 rounded-lg px-4 py-2.5 text-sm text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-accent/50 focus:border-accent transition" />
-            </div>
+          <!-- Commit Range -->
+          <div>
+            <label class="block text-sm font-medium text-gray-300 mb-1.5">Commit Range <span class="text-gray-600 font-normal">(optional)</span></label>
+            <input type="text" x-model="draft.commit_range"
+              class="w-full bg-surface-3 border border-surface-4 rounded-lg px-4 py-2.5 text-sm text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-accent/50 focus:border-accent transition"
+              placeholder="HEAD~3..HEAD  (leave empty to auto-detect)" />
           </div>
 
-          <!-- GitHub target (auto-filled from URL) -->
+          <!-- GitHub target -->
           <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <label class="block text-sm font-medium text-gray-300 mb-1.5">GitHub Owner</label>
               <input type="text" x-model="draft.owner"
                 class="w-full bg-surface-3 border border-surface-4 rounded-lg px-4 py-2.5 text-sm text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-accent/50 focus:border-accent transition"
-                placeholder="Auto-filled from URL or enter manually" />
+                placeholder="e.g. octocat" />
             </div>
             <div>
               <label class="block text-sm font-medium text-gray-300 mb-1.5">GitHub Repo</label>
               <input type="text" x-model="draft.repo"
                 class="w-full bg-surface-3 border border-surface-4 rounded-lg px-4 py-2.5 text-sm text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-accent/50 focus:border-accent transition"
-                placeholder="Auto-filled from URL or enter manually" />
+                placeholder="e.g. octocat" />
             </div>
           </div>
 
@@ -319,16 +296,17 @@
           </fieldset>
 
           <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div class="md:col-span-2">
-              <label class="block text-sm font-medium text-gray-300 mb-1.5">Repository</label>
-              <div class="relative">
-                <input type="text" x-model="improve.repo_source"
-                  @input="onRepoSourceChange($event.target.value, 'improve')"
-                  class="w-full bg-surface-3 border border-surface-4 rounded-lg px-4 py-2.5 text-sm text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-accent/50 focus:border-accent transition"
-                  placeholder="https://github.com/owner/repo  or  owner/repo" />
-                <span x-show="improve._isUrl" class="absolute right-3 top-1/2 -translate-y-1/2 text-xs bg-accent/20 text-accent px-2 py-0.5 rounded-full">URL</span>
-              </div>
-              <p class="text-xs text-gray-600 mt-1">Paste a GitHub URL or enter as owner/repo</p>
+            <div>
+              <label class="block text-sm font-medium text-gray-300 mb-1.5">GitHub Owner</label>
+              <input type="text" x-model="improve.owner"
+                class="w-full bg-surface-3 border border-surface-4 rounded-lg px-4 py-2.5 text-sm text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-accent/50 focus:border-accent transition"
+                placeholder="e.g. octocat" />
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-300 mb-1.5">GitHub Repo</label>
+              <input type="text" x-model="improve.repo"
+                class="w-full bg-surface-3 border border-surface-4 rounded-lg px-4 py-2.5 text-sm text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-accent/50 focus:border-accent transition"
+                placeholder="e.g. hello-world" />
             </div>
             <div>
               <label class="block text-sm font-medium text-gray-300 mb-1.5"
@@ -339,7 +317,7 @@
             </div>
           </div>
 
-          <button @click="runImprove()" :disabled="loading || !improve.repo_source.trim()"
+          <button @click="runImprove()" :disabled="loading || !improve.owner.trim() || !improve.repo.trim()"
             class="inline-flex items-center gap-2 bg-accent hover:bg-blue-500 disabled:opacity-40 disabled:cursor-not-allowed px-5 py-2.5 rounded-lg text-sm font-medium text-white transition-all">
             <template x-if="loading && activeTab === 2">
               <svg class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
@@ -359,9 +337,7 @@
                 Critique (Reviewer)
               </h3>
             </div>
-            <div class="p-6">
-              <pre class="text-sm text-gray-300 bg-surface-1 p-4 rounded-lg leading-relaxed" x-text="getStage(improveResult, 'reviewer')"></pre>
-            </div>
+            <div class="p-6" x-html="formatCritiqueResult(improveResult)"></div>
           </div>
 
           <div class="bg-surface-2 rounded-xl border border-success/40 overflow-hidden">
@@ -371,9 +347,7 @@
                 Improved Version (Writer)
               </h3>
             </div>
-            <div class="p-6">
-              <pre class="text-sm text-gray-300 bg-surface-1 p-4 rounded-lg leading-relaxed" x-text="getStage(improveResult, 'writer')"></pre>
-            </div>
+            <div class="p-6" x-html="formatImprovedVersion(improveResult)"></div>
           </div>
 
           <div class="bg-surface-2 rounded-xl border border-warning/40 overflow-hidden">
@@ -383,9 +357,7 @@
                 Gatekeeper Reflection
               </h3>
             </div>
-            <div class="p-6">
-              <pre class="text-sm text-gray-300 bg-surface-1 p-4 rounded-lg leading-relaxed" x-text="getStage(improveResult, 'gatekeeper')"></pre>
-            </div>
+            <div class="p-6" x-html="formatGatekeeperResult(improveResult)"></div>
           </div>
 
           <div class="flex items-center gap-3 pt-2" x-show="improveTaskId">
@@ -458,13 +430,12 @@
         ],
 
         // Tab 1
-        review: { repo_source: '', commit_range: '', _isUrl: false },
+        review: { commit_range: '' },
         reviewResult: null,
 
         // Tab 2
         draft: {
           action_type: 'issue',
-          repo_source: '',
           commit_range: '',
           instruction: '',
           review_context: '',
@@ -472,20 +443,31 @@
           repo: '',
           head: '',
           base: 'main',
-          _isUrl: false,
           _fromReview: false,
         },
         draftResult: null,
         draftTaskId: null,
 
         // Tab 3
-        improve: { repo_source: '', number: 1, item_type: 'issue', _isUrl: false },
+        improve: { owner: '', repo: '', number: 1, item_type: 'issue' },
         improveResult: null,
         improveTaskId: null,
 
         ws: null,
 
-        init() { this.connectWS(); },
+        init() {
+          this.connectWS();
+          fetch('/api/repo-info').then(r => r.json()).then(info => {
+            if (info.owner) {
+              this.draft.owner = info.owner;
+              this.improve.owner = info.owner;
+            }
+            if (info.repo) {
+              this.draft.repo = info.repo;
+              this.improve.repo = info.repo;
+            }
+          }).catch(() => {});
+        },
 
         connectWS() {
           const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
@@ -512,22 +494,6 @@
           this.pipelineStages.forEach(s => { s.active = false; s.done = false; });
         },
 
-        // URL detection & owner/repo extraction
-        onRepoSourceChange(value, target) {
-          const isUrl = /github\.com\//.test(value);
-          if (target === 'review') {
-            this.review._isUrl = isUrl;
-          } else if (target === 'draft') {
-            this.draft._isUrl = isUrl;
-            if (isUrl) {
-              const m = value.match(/github\.com\/([^/]+)\/([^/.\s]+)/);
-              if (m) { this.draft.owner = m[1]; this.draft.repo = m[2]; }
-            }
-          } else if (target === 'improve') {
-            this.improve._isUrl = isUrl;
-          }
-        },
-
         // ---------------------------------------------------------------
         // Task 1: Review
         // ---------------------------------------------------------------
@@ -542,7 +508,6 @@
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({
-                repo_source: this.review.repo_source.trim(),
                 commit_range: this.review.commit_range,
               }),
             });
@@ -552,12 +517,6 @@
             }
             const data = await resp.json();
             this.reviewResult = data;
-            // Auto-fill draft fields from resolved info
-            if (data._resolved) {
-              this.draft.repo_source = this.review.repo_source;
-              if (data._resolved.owner) this.draft.owner = data._resolved.owner;
-              if (data._resolved.repo) this.draft.repo = data._resolved.repo;
-            }
           } catch (err) {
             this.statusMessage = `Error: ${err.message}`;
             this.statusType = 'error';
@@ -570,9 +529,6 @@
           this.draft.instruction = `Based on the following code review, draft the appropriate content:\n\n${reviewText}`;
           this.draft.review_context = reviewText;
           this.draft._fromReview = true;
-          if (!this.draft.repo_source) {
-            this.draft.repo_source = this.review.repo_source;
-          }
           this.draft.commit_range = this.review.commit_range;
           this.activeTab = 1;
         },
@@ -598,7 +554,6 @@
               body: JSON.stringify({
                 mode: mode,
                 action_type: this.draft.action_type,
-                repo_source: this.draft.repo_source.trim(),
                 commit_range: this.draft.commit_range,
                 instruction: this.draft.instruction,
                 review_context: this.draft.review_context,
@@ -643,7 +598,8 @@
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({
-                repo_source: this.improve.repo_source.trim(),
+                owner: this.improve.owner.trim(),
+                repo: this.improve.repo.trim(),
                 number: this.improve.number,
                 item_type: this.improve.item_type,
               }),
@@ -798,6 +754,59 @@
             return html;
           } catch {
             return `<pre class="text-sm text-gray-300 bg-surface-1 p-4 rounded-lg leading-relaxed">${this.esc(gk)}</pre>`;
+          }
+        },
+
+        formatCritiqueResult(result) {
+          const reviewer = this.getStage(result, 'reviewer');
+          if (!reviewer) return '<p class="text-gray-500">No critique data.</p>';
+          try {
+            const d = JSON.parse(reviewer);
+            const c = d.critique || {};
+            const severityColors = { major: 'bg-danger/20 text-danger', moderate: 'bg-warning/20 text-warning', minor: 'bg-success/20 text-success' };
+            const sevClass = severityColors[d.severity] || 'bg-surface-4 text-gray-400';
+            let html = `<div class="space-y-4">`;
+            html += `<div class="flex flex-wrap gap-2"><span class="px-3 py-1 rounded-full text-xs font-semibold ${sevClass}">${this.esc(d.severity || '?')} severity</span></div>`;
+            if (d.original_title) html += `<div><h4 class="text-sm font-semibold text-gray-300 mb-1">Original Title</h4><p class="text-sm text-gray-400">${this.esc(d.original_title)}</p></div>`;
+            const critiqueItems = [
+              { label: 'Unclear Sections', items: c.unclear_sections, color: 'text-warning' },
+              { label: 'Missing Information', items: c.missing_information, color: 'text-danger' },
+              { label: 'Vague Language', items: c.vague_language, color: 'text-yellow-400' },
+            ];
+            for (const s of critiqueItems) {
+              if (s.items && s.items.length > 0) {
+                html += `<div><h4 class="text-sm font-semibold text-gray-300 mb-1">${s.label}</h4><ul class="space-y-1">`;
+                html += s.items.map(i => `<li class="flex items-start gap-2 text-sm ${s.color}"><span class="mt-0.5">&#9679;</span><span class="text-gray-400">${this.esc(i)}</span></li>`).join('');
+                html += `</ul></div>`;
+              }
+            }
+            if (c.missing_acceptance_criteria) html += `<p class="text-sm text-warning flex items-center gap-2"><span>&#9679;</span> Missing acceptance criteria</p>`;
+            if (c.missing_reproduction_steps) html += `<p class="text-sm text-warning flex items-center gap-2"><span>&#9679;</span> Missing reproduction steps</p>`;
+            if (c.missing_test_plan) html += `<p class="text-sm text-warning flex items-center gap-2"><span>&#9679;</span> Missing test plan</p>`;
+            if (c.missing_behavior_change) html += `<p class="text-sm text-warning flex items-center gap-2"><span>&#9679;</span> Missing behavior change description</p>`;
+            html += `</div>`;
+            return html;
+          } catch {
+            return `<pre class="text-sm text-gray-300 bg-surface-1 p-4 rounded-lg leading-relaxed">${this.esc(reviewer)}</pre>`;
+          }
+        },
+
+        formatImprovedVersion(result) {
+          const writer = this.getStage(result, 'writer');
+          if (!writer) return '<p class="text-gray-500">No improved version.</p>';
+          try {
+            const d = JSON.parse(writer);
+            return `
+              <div class="space-y-4">
+                <h4 class="text-lg font-semibold text-white">${this.esc(d.title || d.original_title || 'Untitled')}</h4>
+                <div class="bg-surface-1 rounded-lg p-5 border border-surface-4">
+                  <pre class="text-sm text-gray-300 leading-relaxed">${this.esc(d.body || d.improved_body || '')}</pre>
+                </div>
+                ${d.labels ? `<div class="flex flex-wrap gap-2">${d.labels.map(l => `<span class="px-2.5 py-1 bg-surface-4 rounded-full text-xs font-medium text-gray-300">${this.esc(l)}</span>`).join('')}</div>` : ''}
+                ${d.changes_made ? `<div><h4 class="text-sm font-semibold text-gray-300 mb-1">Changes Made</h4><ul class="space-y-1">${(Array.isArray(d.changes_made) ? d.changes_made : [d.changes_made]).map(c => `<li class="flex items-start gap-2 text-sm text-gray-400"><span class="text-success mt-0.5">&#9679;</span>${this.esc(c)}</li>`).join('')}</ul></div>` : ''}
+              </div>`;
+          } catch {
+            return `<pre class="text-sm text-gray-300 bg-surface-1 p-4 rounded-lg leading-relaxed">${this.esc(writer)}</pre>`;
           }
         },
 

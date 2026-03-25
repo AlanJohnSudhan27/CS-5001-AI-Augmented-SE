@@ -3,11 +3,14 @@ Web Server — thin FastAPI layer that proxies to the Orchestrator Agent.
 
 Serves the static frontend, provides REST endpoints that forward to
 the Orchestrator via A2A, and streams progress via WebSocket.
+
+The agent always operates on the current working directory (repo).
 """
 from __future__ import annotations
 
 import json
 import re
+import subprocess
 import uuid
 
 import httpx
@@ -17,49 +20,36 @@ from fastapi.responses import FileResponse
 
 import sys, os
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
-from config import WEB_PORT, ORCHESTRATOR_PORT, MCP_PORT
+from config import WEB_PORT, ORCHESTRATOR_PORT
 from web.models import ReviewRequest, DraftRequest, ImproveRequest
 
 app = FastAPI(title="GitHub Repository Agent")
 
 ORCHESTRATOR_URL = f"http://localhost:{ORCHESTRATOR_PORT}"
-MCP_URL = f"http://localhost:{MCP_PORT}"
 
-# ---------------------------------------------------------------------------
-# Repo URL helpers
-# ---------------------------------------------------------------------------
-
-_GITHUB_URL_RE = re.compile(
-    r"(?:https?://)?github\.com/(?P<owner>[^/]+)/(?P<repo>[^/.\s]+)"
+_GH_REMOTE_RE = re.compile(
+    r"(?:https?://github\.com/|git@github\.com:)([^/]+)/([^/.]+?)(?:\.git)?$"
 )
 
 
-def _parse_github_url(source: str) -> dict | None:
-    """If source looks like a GitHub URL, return {owner, repo, url}."""
-    m = _GITHUB_URL_RE.search(source.strip())
-    if m:
-        owner, repo = m.group("owner"), m.group("repo")
-        url = f"https://github.com/{owner}/{repo}.git"
-        return {"owner": owner, "repo": repo, "url": url}
-    return None
+# ---------------------------------------------------------------------------
+# Repo info — auto-detect owner/repo from git remote
+# ---------------------------------------------------------------------------
 
-
-async def _resolve_repo(source: str) -> tuple[str, str, str]:
-    """Resolve a repo source to (local_path, owner, repo).
-
-    If source is a URL, clone it via MCP and extract owner/repo.
-    If local path, return it as-is with empty owner/repo.
-    """
-    parsed = _parse_github_url(source)
-    if not parsed:
-        return source, "", ""
-
-    # Clone via MCP tool
-    from mcp_client.session import MCPSession
-    async with MCPSession(f"http://localhost:{MCP_PORT}/sse") as session:
-        local_path = await session.call_tool("git_clone", repo_url=parsed["url"])
-
-    return local_path, parsed["owner"], parsed["repo"]
+@app.get("/api/repo-info")
+async def repo_info() -> dict:
+    try:
+        result = subprocess.run(
+            ["git", "remote", "get-url", "origin"],
+            capture_output=True, text=True, timeout=5,
+        )
+        url = result.stdout.strip()
+        m = _GH_REMOTE_RE.match(url)
+        if m:
+            return {"owner": m.group(1), "repo": m.group(2)}
+    except Exception:
+        pass
+    return {"owner": "", "repo": ""}
 
 
 # ---------------------------------------------------------------------------
@@ -114,17 +104,12 @@ async def _send_to_orchestrator(message: dict) -> dict:
 async def review_changes(req: ReviewRequest) -> dict:
     await broadcast({"event": "pipeline_start", "pipeline": "review"})
 
-    repo_path, owner, repo = await _resolve_repo(req.repo_source)
-
     message = {
         "type": "review",
-        "repo_path": repo_path,
+        "repo_path": ".",
         "commit_range": req.commit_range,
     }
     result = await _send_to_orchestrator(message)
-
-    # Attach resolved info so the frontend can auto-fill GitHub fields
-    result["_resolved"] = {"repo_path": repo_path, "owner": owner, "repo": repo}
 
     await broadcast({"event": "pipeline_complete", "pipeline": "review"})
     return result
@@ -138,18 +123,16 @@ async def review_changes(req: ReviewRequest) -> dict:
 async def draft_content(req: DraftRequest) -> dict:
     await broadcast({"event": "pipeline_start", "pipeline": "draft"})
 
-    repo_path, url_owner, url_repo = await _resolve_repo(req.repo_source)
-
     message = {
         "type": "draft",
         "mode": req.mode,
         "action_type": req.action_type,
-        "repo_path": repo_path,
+        "repo_path": ".",
         "commit_range": req.commit_range,
         "instruction": req.instruction,
         "review_context": req.review_context,
-        "owner": req.owner or url_owner,
-        "repo": req.repo or url_repo,
+        "owner": req.owner,
+        "repo": req.repo,
         "head": req.head,
         "base": req.base,
     }
@@ -167,29 +150,18 @@ async def draft_content(req: DraftRequest) -> dict:
 async def improve_content(req: ImproveRequest) -> dict:
     await broadcast({"event": "pipeline_start", "pipeline": "improve"})
 
-    # Extract owner/repo from URL or "owner/repo" string
-    parsed = _parse_github_url(req.repo_source)
-    if parsed:
-        owner, repo = parsed["owner"], parsed["repo"]
-    elif "/" in req.repo_source:
-        # Treat as "owner/repo" format
-        parts = req.repo_source.strip().split("/")
-        owner, repo = parts[0], parts[1]
-    else:
-        owner, repo = "", ""
-
     if req.item_type == "pr":
         message = {
             "type": "improve_pr",
-            "owner": owner,
-            "repo": repo,
+            "owner": req.owner,
+            "repo": req.repo,
             "pr_number": req.number,
         }
     else:
         message = {
             "type": "improve_issue",
-            "owner": owner,
-            "repo": repo,
+            "owner": req.owner,
+            "repo": req.repo,
             "issue_number": req.number,
         }
     result = await _send_to_orchestrator(message)

@@ -124,24 +124,6 @@ TOOLS = [
         },
     },
     {
-        "name": "git_clone",
-        "description": "Clone a remote git repository to a local directory. Returns the local path.",
-        "inputSchema": {
-            "type": "object",
-            "properties": {
-                "repo_url": {
-                    "type": "string",
-                    "description": "Remote repository URL (HTTPS or SSH)",
-                },
-                "target_dir": {
-                    "type": "string",
-                    "description": "Optional local directory to clone into. Auto-generated if omitted.",
-                },
-            },
-            "required": ["repo_url"],
-        },
-    },
-    {
         "name": "github_create_pr",
         "description": "Create a new GitHub pull request.",
         "inputSchema": {

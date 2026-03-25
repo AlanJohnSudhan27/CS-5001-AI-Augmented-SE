@@ -9,7 +9,6 @@ tested independently of the MCP server.
 """
 import json
 import subprocess
-import tempfile
 from pathlib import Path
 
 import httpx
@@ -20,35 +19,9 @@ from config import GITHUB_TOKEN
 
 MAX_FILE_CHARS = 8_000
 
-# Persistent temp directory for cloned repos (survives across requests)
-_CLONE_BASE = os.path.join(tempfile.gettempdir(), "github_agent_repos")
-
 # ---------------------------------------------------------------------------
 # Git tools
 # ---------------------------------------------------------------------------
-
-def git_clone(repo_url: str, target_dir: str = "") -> str:
-    """Clone a remote repo. Re-uses existing clone if present."""
-    os.makedirs(_CLONE_BASE, exist_ok=True)
-    # Derive a stable folder name from the URL
-    repo_name = repo_url.rstrip("/").split("/")[-1].removesuffix(".git")
-    dest = target_dir or os.path.join(_CLONE_BASE, repo_name)
-
-    if os.path.isdir(os.path.join(dest, ".git")):
-        # Already cloned — pull latest
-        subprocess.run(
-            ["git", "-C", dest, "pull", "--ff-only"],
-            capture_output=True, text=True, timeout=60,
-        )
-        return dest
-
-    result = subprocess.run(
-        ["git", "clone", "--depth", "50", repo_url, dest],
-        capture_output=True, text=True, timeout=120,
-    )
-    if result.returncode != 0:
-        raise RuntimeError(f"git clone failed: {result.stderr.strip()}")
-    return dest
 
 
 def git_diff(repo_path: str, commit_range: str = "") -> str:
@@ -66,15 +39,14 @@ def git_diff(repo_path: str, commit_range: str = "") -> str:
     result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
     output = result.stdout.strip()
 
-    # If no range was given and working tree diff is empty, fall back to last 5 commits
+    # If no range was given and working tree diff is empty, fall back to the last commit
     if not commit_range and not output:
-        # Count available commits (may be fewer than 5)
+        # Count available commits (may be only the initial commit)
         count_result = subprocess.run(
             ["git", "-C", repo_path, "rev-list", "--count", "HEAD"],
             capture_output=True, text=True, timeout=10,
         )
         total = int(count_result.stdout.strip()) if count_result.returncode == 0 else 1
-        depth = min(total, 5)
 
         if total <= 1:
             # Only the initial commit — diff it against an empty tree
@@ -84,14 +56,14 @@ def git_diff(repo_path: str, commit_range: str = "") -> str:
             )
         else:
             fallback = subprocess.run(
-                ["git", "-C", repo_path, "diff", f"HEAD~{depth}..HEAD"],
+                ["git", "-C", repo_path, "diff", "HEAD~1..HEAD"],
                 capture_output=True, text=True, timeout=30,
             )
         output = fallback.stdout.strip()
         if not output:
-            return "(no changes in working tree or last 5 commits)"
+            return "(no changes in working tree or last commit)"
         # Prepend a note so downstream agents know this is a fallback diff
-        header = f"[NOTE: No uncommitted changes found. Showing diff from the last {depth} commit(s).]\n\n"
+        header = "[NOTE: No uncommitted changes found. Showing diff from the last commit.]\n\n"
         return header + output[:MAX_FILE_CHARS]
 
     return output[:MAX_FILE_CHARS] if output else "(no changes)"

@@ -57,7 +57,7 @@ class ReviewerAgent(BaseA2AAgent):
 
         prompt = f"""You are a senior code reviewer. Analyze the following git diff and recent commit log.
 
-The diff may come from uncommitted working tree changes OR from the last 5 commits if no
+The diff may come from uncommitted working tree changes OR from the last commit if no
 uncommitted changes were found. Either way, analyze the actual code changes shown.
 
 ## Git Diff
